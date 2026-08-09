@@ -9,7 +9,38 @@
 {% endblock %}
 
 {% block content %}
-<div class="pa-md">
-    {% include '@MauticMailRuPostmaster/Report/table.html.twig' with { rows: rows, showDomain: false } %}
+<div class="pa-md" id="mailru-postmaster-periods">
+    {% for year in years %}
+        <h3 class="mt-lg mb-sm">{{ year.year }}</h3>
+        {% for month in year.months %}
+            <details name="mailru-postmaster-month" class="panel panel-default mb-sm"{% if month.open %} open{% endif %}>
+                <summary class="panel-heading" style="cursor: pointer; list-style-position: inside">
+                    <strong>{{ ('mailru.postmaster.month.' ~ month.number)|trans }} {{ year.year }}</strong>
+                    <span class="text-secondary">({{ month.rows|length }})</span>
+                </summary>
+                <div class="panel-body pa-0">
+                    {% if month.rows is empty %}
+                        <div class="pa-md text-secondary">{{ 'mailru.postmaster.report.month_empty'|trans }}</div>
+                    {% else %}
+                        {% include '@MauticMailRuPostmaster/Report/table.html.twig' with { rows: month.rows, showDomain: false } %}
+                    {% endif %}
+                </div>
+            </details>
+        {% endfor %}
+    {% endfor %}
 </div>
+<script>
+    (function () {
+        var root = document.getElementById('mailru-postmaster-periods');
+        if (!root || root.dataset.accordionReady === '1') return;
+        root.dataset.accordionReady = '1';
+        root.addEventListener('toggle', function (event) {
+            var opened = event.target;
+            if (!opened.matches('details[name="mailru-postmaster-month"]') || !opened.open) return;
+            root.querySelectorAll('details[name="mailru-postmaster-month"][open]').forEach(function (item) {
+                if (item !== opened) item.removeAttribute('open');
+            });
+        }, true);
+    }());
+</script>
 {% endblock %}

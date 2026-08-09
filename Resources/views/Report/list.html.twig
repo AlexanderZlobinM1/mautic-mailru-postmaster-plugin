@@ -9,7 +9,7 @@
     {% if rows is empty %}
         <div class="alert alert-info">{{ 'mailru.postmaster.report.empty'|trans }}</div>
     {% else %}
-        {% include '@MauticMailRuPostmaster/Report/table.html.twig' with { rows: rows, showDomain: true } %}
+        {% include '@MauticMailRuPostmaster/Report/table.html.twig' with { rows: rows, showDomain: true, showTrend: false } %}
     {% endif %}
 </div>
 {% endblock %}

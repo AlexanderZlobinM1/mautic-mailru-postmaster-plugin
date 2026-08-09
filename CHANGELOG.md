@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- Group domain history into year/month accordions. The current month opens by
+  default, and opening another month closes the previous one.
+- Aggregate sent messages and complaints across retained history in the domain
+  summary while keeping reputation/deliverability from the latest day and
+  hiding the non-meaningful aggregate trend column.
+- Make the current calendar month the normal incremental synchronization
+  window; previously stored old months are left untouched.
+- Add a weekly full 365-day fallback synchronization, defaulting to Sunday at
+  03:00 local time and configurable in the plugin or overridden from MCC.
+- Add explicit `--current-month`, `--full`, and MCD-facing `--scheduled-full`
+  command modes and document safe standalone cron equivalents.
+
 ## 0.3.0
 
 - Add the MCD scheduling contract: active MCD profiles auto-detect the plugin

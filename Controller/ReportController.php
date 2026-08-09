@@ -7,6 +7,7 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Controller;
 use Mautic\CoreBundle\Controller\CommonController;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\DomainNormalizer;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\ReportPeriodGrouper;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -32,7 +33,12 @@ final class ReportController extends CommonController
         ]);
     }
 
-    public function domainAction(Request $request, string $domain, DomainStatRepository $repository): Response
+    public function domainAction(
+        Request $request,
+        string $domain,
+        DomainStatRepository $repository,
+        ReportPeriodGrouper $periodGrouper,
+    ): Response
     {
         if (!$this->mayViewReports()) {
             return $this->accessDenied();
@@ -51,7 +57,7 @@ final class ReportController extends CommonController
         return $this->delegateView([
             'viewParameters' => [
                 'domain' => $domain,
-                'rows'   => $rows,
+                'years'  => $periodGrouper->group($rows),
             ],
             'contentTemplate' => '@MauticMailRuPostmaster/Report/domain.html.twig',
             'passthroughVars' => [

@@ -83,7 +83,27 @@ final class DomainStatRepository extends CommonRepository
             ORDER BY s.domain ASC
             SQL;
 
-        return $this->getEntityManager()->getConnection()->executeQuery($sql)->fetchAllAssociative();
+        $connection = $this->getEntityManager()->getConnection();
+        $rows = $connection->executeQuery($sql)->fetchAllAssociative();
+        $totals = $connection->createQueryBuilder()
+            ->select('domain', 'SUM(messages_sent) AS messages_sent_total', 'SUM(complaints) AS complaints_total')
+            ->from($table)
+            ->where('is_tracked = 1')
+            ->groupBy('domain')
+            ->executeQuery()
+            ->fetchAllAssociativeIndexed();
+
+        foreach ($rows as &$row) {
+            $domainTotals = $totals[(string) $row['domain']] ?? null;
+            if (!is_array($domainTotals)) {
+                continue;
+            }
+            $row['messages_sent'] = $domainTotals['messages_sent_total'] ?? $row['messages_sent'];
+            $row['complaints'] = $domainTotals['complaints_total'] ?? $row['complaints'];
+        }
+        unset($row);
+
+        return $rows;
     }
 
     /**

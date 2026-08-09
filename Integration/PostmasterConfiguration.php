@@ -33,6 +33,16 @@ final class PostmasterConfiguration
         return $this->getIntegration()->getRetentionDays();
     }
 
+    public function getFullSyncWeekday(): int
+    {
+        return $this->getIntegration()->getFullSyncWeekday();
+    }
+
+    public function getFullSyncTime(): string
+    {
+        return $this->getIntegration()->getFullSyncTime();
+    }
+
     private function getIntegration(): MailRuPostmasterIntegration
     {
         $integration = $this->integrationHelper->getIntegrationObject(MailRuPostmasterIntegration::NAME);

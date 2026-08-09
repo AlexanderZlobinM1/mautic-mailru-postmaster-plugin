@@ -1,4 +1,5 @@
 <div class="table-responsive">
+    {% set showTrend = showTrend|default(true) %}
     <table class="table table-hover">
         <thead>
         <tr>
@@ -7,7 +8,7 @@
             <th class="text-right">{{ 'mailru.postmaster.report.messages_sent'|trans }}</th>
             <th class="text-right">{{ 'mailru.postmaster.report.complaints'|trans }}</th>
             <th class="text-right">{{ 'mailru.postmaster.report.reputation'|trans }}</th>
-            <th class="text-right">{{ 'mailru.postmaster.report.trend'|trans }}</th>
+            {% if showTrend %}<th class="text-right">{{ 'mailru.postmaster.report.trend'|trans }}</th>{% endif %}
             <th>{{ 'mailru.postmaster.report.deliverability'|trans }}</th>
         </tr>
         </thead>
@@ -29,10 +30,12 @@
                 <td class="text-right">{{ row.messages_sent|number_format(0, ',', ' ') }}</td>
                 <td class="text-right">{{ row.complaints|number_format(0, ',', ' ') }}</td>
                 <td class="text-right">{{ row.reputation|number_format(2, ',', ' ') }}</td>
-                <td class="text-right">
-                    {{ row.trend|number_format(2, ',', ' ') }}
-                    {% if row.trend > 0 %}<i class="ri-arrow-up-line text-danger"></i>{% elseif row.trend < 0 %}<i class="ri-arrow-down-line text-success"></i>{% endif %}
-                </td>
+                {% if showTrend %}
+                    <td class="text-right">
+                        {{ row.trend|number_format(2, ',', ' ') }}
+                        {% if row.trend > 0 %}<i class="ri-arrow-up-line text-danger"></i>{% elseif row.trend < 0 %}<i class="ri-arrow-down-line text-success"></i>{% endif %}
+                    </td>
+                {% endif %}
                 <td style="min-width: 260px">
                     <div class="d-flex" style="height: 28px; overflow: hidden; border-radius: 2px">
                         {% if delivered > 0 %}<div class="bg-success pa-xs" style="width: {{ delivered }}%" title="{{ delivered|number_format(2, ',', ' ') }}%">{{ delivered|number_format(1, ',', ' ') }}</div>{% endif %}
