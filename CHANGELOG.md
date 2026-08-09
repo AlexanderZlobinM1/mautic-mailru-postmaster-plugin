@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1
+
+- Clarify in the report that message and complaint counts come from Mail.ru
+  Postmaster, which attributes traffic to the DKIM `d=` domain rather than to
+  Mautic's `From` field or total send log.
+- Correct the campaign guard help text for emails with an empty `From`: the
+  effective global Mautic sender is used.
+
 ## 0.5.0
 
 - Add a dedicated **Mail.ru Postmaster** section to Mautic's standard
