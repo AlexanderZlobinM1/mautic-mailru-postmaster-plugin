@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3
+
+- Remove the duplicate Mail.ru Postmaster section from Mautic's global
+  Configuration screen. Enablement, token, retention and weekly synchronization
+  settings now live only on the canonical plugin integration tile.
+- Keep the campaign-guard location hint on the plugin tile.
+
 ## 0.5.2
 
 - Hide the trend column in the retained-history domain summary as intended;
