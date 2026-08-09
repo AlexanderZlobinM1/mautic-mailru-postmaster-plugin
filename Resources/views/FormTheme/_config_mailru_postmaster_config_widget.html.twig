@@ -1,0 +1,23 @@
+{% block _config_mailru_postmaster_config_widget %}
+{% set fields = form.children %}
+<div class="row">
+    <div class="panel panel-default mb-md">
+        <div class="panel-body">
+            <div class="alert alert-info">
+                {{ 'mailru.postmaster.config.standard_intro.before'|trans }}
+                <a href="https://o2.mail.ru/login?client_id=postmaster_api_client&amp;redirect_uri=https%3A%2F%2Fpostmaster.mail.ru%2Fext-api%2Foauth%2F&amp;response_type=code&amp;state=some_state" target="_blank" rel="noopener noreferrer">{{ 'mailru.postmaster.config.instructions.link'|trans }}</a>:
+                {{ 'mailru.postmaster.config.standard_intro.after'|trans }}
+            </div>
+            <div class="col-xs-12">{{ form_row(fields.mailru_postmaster_enabled) }}</div>
+            <div class="col-xs-12">{{ form_row(fields.mailru_postmaster_token_json) }}</div>
+            <div class="col-xs-12 col-md-4">{{ form_row(fields.mailru_postmaster_retention_days) }}</div>
+            <div class="col-xs-12 col-md-4">{{ form_row(fields.mailru_postmaster_full_sync_weekday) }}</div>
+            <div class="col-xs-12 col-md-4">{{ form_row(fields.mailru_postmaster_full_sync_time) }}</div>
+            <div class="col-xs-12">
+                <div class="alert alert-warning">{{ 'mailru.postmaster.config.guard_note'|trans }}</div>
+                <p class="text-right text-secondary">Copyright <a href="https://sales-snap.ru" target="_blank" rel="noopener noreferrer">Sales-snap.ru</a> 2026</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

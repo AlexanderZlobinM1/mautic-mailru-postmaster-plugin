@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace MauticPlugin\MauticMailRuPostmasterBundle\Service;
 
 use Doctrine\DBAL\Connection;
+use Mautic\CoreBundle\Helper\CoreParametersHelper;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\DomainNormalizer;
-use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 final class EmailDomainProvider
 {
     public function __construct(
         private readonly Connection $connection,
-        private readonly ParameterBagInterface $parameterBag,
+        private readonly CoreParametersHelper $parametersHelper,
     ) {
     }
 
@@ -65,18 +65,12 @@ final class EmailDomainProvider
 
     private function getDefaultDomain(): ?string
     {
-        foreach (['mautic.mailer_from_email', 'mailer_from_email'] as $parameter) {
-            if (!$this->parameterBag->has($parameter)) {
-                continue;
-            }
-            $value = $this->parameterBag->get($parameter);
-            if (!is_string($value) || '' === trim($value)) {
-                continue;
-            }
-            $domain = DomainNormalizer::fromEmailAddress(trim($value));
-            if (null !== $domain) {
-                return $domain;
-            }
+        // Use the same helper as Mautic's actual mail sender. In Mautic 7 the
+        // raw DI parameter may be an unresolved MAUTIC_MAILER_FROM_EMAIL env
+        // placeholder while config/local.php contains the effective value.
+        $value = $this->parametersHelper->get('mailer_from_email');
+        if (is_string($value) && '' !== trim($value)) {
+            return DomainNormalizer::fromEmailAddress(trim($value));
         }
 
         return null;

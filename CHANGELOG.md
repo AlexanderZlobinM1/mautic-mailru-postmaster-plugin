@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+- Add a dedicated **Mail.ru Postmaster** section to Mautic's standard
+  Configuration screen with the enable switch, token, retention and weekly
+  full-sync schedule.
+- Keep that section and the integration tile on one encrypted settings record;
+  the API token is never duplicated into `config/local.php`.
+- Resolve empty email `From` values through Mautic's canonical
+  `CoreParametersHelper`, matching the actual `mailer_from_email` sender even
+  when the raw DI parameter is an unresolved environment placeholder.
+
 ## 0.4.0
 
 - Group domain history into year/month accordions. The current month opens by

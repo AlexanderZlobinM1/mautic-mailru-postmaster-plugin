@@ -227,4 +227,33 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
         $this->persistIntegrationSettings();
         $this->setIntegrationSettings($this->settings);
     }
+
+    public function savePluginSettings(
+        bool $enabled,
+        string $tokenJson,
+        int $retentionDays,
+        int $fullSyncWeekday,
+        string $fullSyncTime,
+    ): void {
+        $keys = $this->keys;
+        $keys[self::TOKEN_JSON_FIELD] = trim($tokenJson);
+        $keys[self::RETENTION_DAYS_FIELD] = in_array($retentionDays, [30, 90, 180, 365], true)
+            ? $retentionDays
+            : self::DEFAULT_RETENTION_DAYS;
+        $keys[self::FULL_SYNC_WEEKDAY_FIELD] = $fullSyncWeekday >= 0 && $fullSyncWeekday <= 6
+            ? $fullSyncWeekday
+            : self::DEFAULT_FULL_SYNC_WEEKDAY;
+        $keys[self::FULL_SYNC_TIME_FIELD] = 1 === preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/', $fullSyncTime)
+            ? $fullSyncTime
+            : self::DEFAULT_FULL_SYNC_TIME;
+
+        if ($enabled || '' !== $keys[self::TOKEN_JSON_FIELD]) {
+            TokenPayload::fromJson($keys[self::TOKEN_JSON_FIELD]);
+        }
+
+        $this->settings->setIsPublished($enabled);
+        $this->encryptAndSetApiKeys($keys, $this->settings);
+        $this->persistIntegrationSettings();
+        $this->setIntegrationSettings($this->settings);
+    }
 }
