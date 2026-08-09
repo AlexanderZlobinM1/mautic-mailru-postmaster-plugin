@@ -8,7 +8,7 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterIntegration;
 return [
     'name'        => 'Mail.ru Postmaster',
     'description' => 'Mail.ru Postmaster domain statistics and automatic campaign protection.',
-    'version'     => '0.1.0',
+    'version'     => '0.1.1',
     'author'      => 'Alexander Zlobin',
     'routes'      => [
         'main' => [
