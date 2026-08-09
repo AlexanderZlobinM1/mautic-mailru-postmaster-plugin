@@ -13,12 +13,12 @@ return [
     'routes'      => [
         'main' => [
             'mautic_mailru_postmaster_report' => [
-                'path'       => '/reports/mailru-postmaster',
+                'path'       => '/mailru-postmaster/reports',
                 'controller' => ReportController::class.'::indexAction',
                 'method'     => 'GET',
             ],
             'mautic_mailru_postmaster_domain' => [
-                'path'         => '/reports/mailru-postmaster/{domain}',
+                'path'         => '/mailru-postmaster/reports/{domain}',
                 'controller'   => ReportController::class.'::domainAction',
                 'method'       => 'GET',
                 'requirements' => [
