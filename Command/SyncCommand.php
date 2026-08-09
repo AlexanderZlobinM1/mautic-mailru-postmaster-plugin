@@ -28,7 +28,8 @@ final class SyncCommand extends Command
         $this
             ->addOption('days', null, InputOption::VALUE_REQUIRED, 'Number of days to synchronize, including today.', '2')
             ->addOption('date-from', null, InputOption::VALUE_REQUIRED, 'Explicit start date in YYYY-MM-DD format.')
-            ->addOption('date-to', null, InputOption::VALUE_REQUIRED, 'Explicit end date in YYYY-MM-DD format.');
+            ->addOption('date-to', null, InputOption::VALUE_REQUIRED, 'Explicit end date in YYYY-MM-DD format.')
+            ->addOption('active-guards', null, InputOption::VALUE_NONE, 'Refresh only sender domains used by active campaign guards.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -36,8 +37,13 @@ final class SyncCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         try {
-            [$dateFrom, $dateTo] = $this->resolveDates($input);
-            $result              = $this->syncService->sync($dateFrom, $dateTo);
+            $activeGuards = (bool) $input->getOption('active-guards');
+            if ($activeGuards) {
+                $result = $this->syncService->syncActiveGuardDomains();
+            } else {
+                [$dateFrom, $dateTo] = $this->resolveDates($input);
+                $result              = $this->syncService->sync($dateFrom, $dateTo);
+            }
         } catch (\Throwable $exception) {
             $io->error($exception->getMessage());
 
@@ -45,11 +51,21 @@ final class SyncCommand extends Command
         }
 
         $io->success(sprintf(
-            'Stored %d rows for %d tracked domain(s); stopped %d campaign(s).',
+            $activeGuards
+                ? 'Refreshed %d row(s) for %d active guard domain(s); stopped %d campaign(s).'
+                : 'Stored %d rows for %d tracked domain(s); stopped %d campaign(s).',
             $result->storedRows,
             count($result->trackedDomains),
             $result->stoppedCampaigns,
         ));
+        if ($activeGuards) {
+            $io->definitionList(
+                ['Active guard domains' => implode(', ', $result->mauticDomains) ?: 'none'],
+                ['Verified tracked domains' => implode(', ', $result->trackedDomains) ?: 'none'],
+            );
+
+            return Command::SUCCESS;
+        }
         $io->definitionList(
             ['Mautic From domains' => implode(', ', $result->mauticDomains) ?: 'none'],
             ['Postmaster domains'  => implode(', ', $result->registeredDomains) ?: 'none'],
@@ -72,10 +88,10 @@ final class SyncCommand extends Command
             $dateFrom = new \DateTimeImmutable($dateFromValue);
         } else {
             $days = filter_var($input->getOption('days'), FILTER_VALIDATE_INT, [
-                'options' => ['min_range' => 1, 'max_range' => 366],
+                'options' => ['min_range' => 1, 'max_range' => 365],
             ]);
             if (false === $days) {
-                throw new \InvalidArgumentException('--days must be between 1 and 366.');
+                throw new \InvalidArgumentException('--days must be between 1 and 365.');
             }
             $dateFrom = $dateTo->modify(sprintf('-%d days', $days - 1));
         }

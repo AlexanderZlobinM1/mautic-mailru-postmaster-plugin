@@ -34,7 +34,7 @@ final class GuardService
         $now ??= new \DateTimeImmutable();
 
         foreach ($this->eventRepository->findBy(['eventType' => CampaignSubscriber::EVENT_TYPE]) as $event) {
-            if (null !== $event->getDeleted() || !$event->getCampaign()->getIsPublished()) {
+            if (!$this->isActiveGuard($event, $now)) {
                 continue;
             }
 
@@ -44,6 +44,30 @@ final class GuardService
         }
 
         return $stopped;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getActiveDomains(?\DateTimeImmutable $now = null): array
+    {
+        $now ??= new \DateTimeImmutable();
+        $domains = [];
+        foreach ($this->eventRepository->findBy(['eventType' => CampaignSubscriber::EVENT_TYPE]) as $event) {
+            if (!$this->isActiveGuard($event, $now)) {
+                continue;
+            }
+            $properties = $event->getProperties();
+            $domain = $this->emailDomainProvider->getDomainForEmail((int) ($properties['email'] ?? 0));
+            if (null !== $domain) {
+                $domains[$domain] = true;
+            }
+        }
+
+        $domains = array_keys($domains);
+        sort($domains, SORT_STRING);
+
+        return $domains;
     }
 
     public function evaluate(Event $event, ?\DateTimeImmutable $now = null): GuardResult
@@ -137,5 +161,24 @@ final class GuardService
         }
 
         return null;
+    }
+
+    private function isActiveGuard(Event $event, \DateTimeImmutable $now): bool
+    {
+        if (null !== $event->getDeleted()) {
+            return false;
+        }
+
+        $campaign = $event->getCampaign();
+        if (!$campaign->getIsPublished()) {
+            return false;
+        }
+        $publishUp = $campaign->getPublishUp();
+        if ($publishUp instanceof \DateTimeInterface && $publishUp > $now) {
+            return false;
+        }
+        $publishDown = $campaign->getPublishDown();
+
+        return !$publishDown instanceof \DateTimeInterface || $publishDown >= $now;
     }
 }

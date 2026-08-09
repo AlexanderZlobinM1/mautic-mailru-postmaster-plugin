@@ -28,6 +28,11 @@ final class PostmasterConfiguration
         $this->getIntegration()->saveTokenPayload($payload);
     }
 
+    public function getRetentionDays(): int
+    {
+        return $this->getIntegration()->getRetentionDays();
+    }
+
     private function getIntegration(): MailRuPostmasterIntegration
     {
         $integration = $this->integrationHelper->getIntegrationObject(MailRuPostmasterIntegration::NAME);

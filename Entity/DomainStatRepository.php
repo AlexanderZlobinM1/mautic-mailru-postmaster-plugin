@@ -40,6 +40,31 @@ final class DomainStatRepository extends CommonRepository
     }
 
     /**
+     * @return list<string>
+     */
+    public function getTrackedDomains(): array
+    {
+        $domains = $this->getEntityManager()->getConnection()->createQueryBuilder()
+            ->select('DISTINCT domain')
+            ->from(MAUTIC_TABLE_PREFIX.'mailru_postmaster_stats')
+            ->where('is_tracked = 1')
+            ->orderBy('domain', 'ASC')
+            ->executeQuery()
+            ->fetchFirstColumn();
+
+        return array_values(array_filter($domains, 'is_string'));
+    }
+
+    public function pruneBefore(\DateTimeImmutable $cutoff): int
+    {
+        return $this->getEntityManager()->getConnection()->createQueryBuilder()
+            ->delete(MAUTIC_TABLE_PREFIX.'mailru_postmaster_stats')
+            ->where('stat_date < :cutoff')
+            ->setParameter('cutoff', $cutoff->format('Y-m-d'))
+            ->executeStatement();
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function getLatestRows(): array

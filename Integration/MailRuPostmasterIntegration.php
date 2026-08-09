@@ -6,6 +6,7 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Integration;
 
 use Mautic\PluginBundle\Integration\AbstractIntegration;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\TokenPayload;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\Form;
 use Symfony\Component\Form\FormBuilder;
@@ -18,6 +19,8 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
 {
     public const NAME             = 'MailRuPostmaster';
     public const TOKEN_JSON_FIELD = 'token_json';
+    public const RETENTION_DAYS_FIELD = 'retention_days';
+    public const DEFAULT_RETENTION_DAYS = 365;
 
     public function getName(): string
     {
@@ -104,6 +107,23 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
                 }),
             ],
         ]);
+
+        $builder->add(self::RETENTION_DAYS_FIELD, ChoiceType::class, [
+            'label'      => 'mailru.postmaster.config.retention_days',
+            'label_attr' => ['class' => 'control-label'],
+            'required'   => true,
+            'data'       => (int) ($data[self::RETENTION_DAYS_FIELD] ?? self::DEFAULT_RETENTION_DAYS),
+            'choices'    => [
+                'mailru.postmaster.config.retention_days.30'  => 30,
+                'mailru.postmaster.config.retention_days.90'  => 90,
+                'mailru.postmaster.config.retention_days.180' => 180,
+                'mailru.postmaster.config.retention_days.365' => 365,
+            ],
+            'attr' => [
+                'class'   => 'form-control',
+                'tooltip' => 'mailru.postmaster.config.retention_days.help',
+            ],
+        ]);
     }
 
     /**
@@ -134,6 +154,13 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
     public function getTokenJson(): string
     {
         return (string) ($this->keys[self::TOKEN_JSON_FIELD] ?? '');
+    }
+
+    public function getRetentionDays(): int
+    {
+        $days = (int) ($this->keys[self::RETENTION_DAYS_FIELD] ?? self::DEFAULT_RETENTION_DAYS);
+
+        return in_array($days, [30, 90, 180, 365], true) ? $days : self::DEFAULT_RETENTION_DAYS;
     }
 
     public function saveTokenPayload(TokenPayload $payload): void

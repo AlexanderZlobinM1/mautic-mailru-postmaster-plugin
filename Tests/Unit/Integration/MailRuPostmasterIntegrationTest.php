@@ -26,8 +26,16 @@ final class MailRuPostmasterIntegrationTest extends TestCase
         $form = $builder->getForm();
 
         self::assertTrue($form->has(MailRuPostmasterIntegration::TOKEN_JSON_FIELD));
+        self::assertTrue($form->has(MailRuPostmasterIntegration::RETENTION_DAYS_FIELD));
+        self::assertSame(
+            MailRuPostmasterIntegration::DEFAULT_RETENTION_DAYS,
+            $form->get(MailRuPostmasterIntegration::RETENTION_DAYS_FIELD)->getData(),
+        );
 
-        $form->submit([MailRuPostmasterIntegration::TOKEN_JSON_FIELD => 'not-json']);
+        $form->submit([
+            MailRuPostmasterIntegration::TOKEN_JSON_FIELD => 'not-json',
+            MailRuPostmasterIntegration::RETENTION_DAYS_FIELD => 365,
+        ]);
         self::assertGreaterThan(0, $form->get(MailRuPostmasterIntegration::TOKEN_JSON_FIELD)->getErrors(true)->count());
     }
 

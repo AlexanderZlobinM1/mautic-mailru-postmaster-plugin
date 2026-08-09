@@ -6,11 +6,14 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Service;
 
 use Doctrine\DBAL\Connection;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\DomainNormalizer;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 final class EmailDomainProvider
 {
-    public function __construct(private readonly Connection $connection)
-    {
+    public function __construct(
+        private readonly Connection $connection,
+        private readonly ParameterBagInterface $parameterBag,
+    ) {
     }
 
     /**
@@ -23,14 +26,15 @@ final class EmailDomainProvider
         $addresses = $this->connection->createQueryBuilder()
             ->select('DISTINCT e.from_address')
             ->from(MAUTIC_TABLE_PREFIX.'emails', 'e')
-            ->where('e.from_address IS NOT NULL')
-            ->andWhere("e.from_address <> ''")
             ->executeQuery()
             ->fetchFirstColumn();
 
         $domains = [];
         foreach ($addresses as $address) {
-            $domain = DomainNormalizer::fromEmailAddress(is_string($address) ? $address : null);
+            $explicit = is_string($address) ? trim($address) : '';
+            $domain = '' !== $explicit
+                ? DomainNormalizer::fromEmailAddress($explicit)
+                : $this->getDefaultDomain();
             if (null !== $domain) {
                 $domains[$domain] = true;
             }
@@ -52,6 +56,29 @@ final class EmailDomainProvider
             ->executeQuery()
             ->fetchOne();
 
-        return is_string($address) ? DomainNormalizer::fromEmailAddress($address) : null;
+        $explicit = is_string($address) ? trim($address) : '';
+
+        return '' !== $explicit
+            ? DomainNormalizer::fromEmailAddress($explicit)
+            : $this->getDefaultDomain();
+    }
+
+    private function getDefaultDomain(): ?string
+    {
+        foreach (['mautic.mailer_from_email', 'mailer_from_email'] as $parameter) {
+            if (!$this->parameterBag->has($parameter)) {
+                continue;
+            }
+            $value = $this->parameterBag->get($parameter);
+            if (!is_string($value) || '' === trim($value)) {
+                continue;
+            }
+            $domain = DomainNormalizer::fromEmailAddress(trim($value));
+            if (null !== $domain) {
+                return $domain;
+            }
+        }
+
+        return null;
     }
 }

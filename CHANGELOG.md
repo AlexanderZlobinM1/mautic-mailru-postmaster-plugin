@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+- Add the MCD scheduling contract: active MCD profiles auto-detect the plugin
+  per Mautic instance and run the two-day synchronization every ten minutes by
+  default; MCC can override the instance switch and interval.
+- Add a guarded fast path for published campaigns: MCD probes for active
+  Postmaster guard nodes and refreshes only their verified sender domains every
+  seven seconds, leaving room under Mail.ru's ten-requests-per-minute limit.
+- Add configurable statistics retention (30/90/180/365 days), defaulting to the
+  API maximum of 365 days. Pruning happens only after a successful regular sync.
+- Split long history backfills into 30-day detailed-statistics windows and
+  space calls by seven seconds, avoiding the API's effective 30-row response
+  cap and its ten-requests-per-minute/domain limit.
+- Resolve emails with an empty explicit `From` through the effective Mautic
+  `mautic.mailer_from_email` container parameter, including environment-backed
+  configuration, while retaining strict per-instance domain isolation.
+- Document the standalone cron fallback for hosts without active MCD.
+- Clarify where to find the campaign guard and preserve its required placement
+  immediately before the email send action.
+
 ## 0.2.0
 
 - Register as a canonical Mautic `AbstractIntegration` so the plugin tile opens its configuration form.

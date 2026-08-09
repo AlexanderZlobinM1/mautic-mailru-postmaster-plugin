@@ -47,12 +47,21 @@ final class PostmasterApiClient
     /**
      * @return list<array<string, mixed>>
      */
-    public function getDetailedStatistics(\DateTimeImmutable $dateFrom, \DateTimeImmutable $dateTo): array
+    public function getDetailedStatistics(
+        \DateTimeImmutable $dateFrom,
+        \DateTimeImmutable $dateTo,
+        ?string $domain = null,
+    ): array
     {
-        $response = $this->request('stat-list-detailed/', [
+        $query = [
             'date_from' => $dateFrom->format('Y-m-d'),
             'date_to'   => $dateTo->format('Y-m-d'),
-        ]);
+        ];
+        if (null !== $domain) {
+            $query['domain'] = $domain;
+        }
+
+        $response = $this->request('stat-list-detailed/', $query);
 
         return array_values(array_filter(
             $response['data'] ?? [],
