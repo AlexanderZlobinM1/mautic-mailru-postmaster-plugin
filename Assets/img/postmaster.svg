@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Mail.ru Postmaster</title>
+  <rect x="17" y="28" width="94" height="72" rx="12" fill="none" stroke="#005ff9" stroke-width="8"/>
+  <path d="M23 38 64 70 105 38" fill="none" stroke="#ff9e00" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m23 91 29-28M105 91 76 63" fill="none" stroke="#005ff9" stroke-width="7" stroke-linecap="round"/>
+</svg>

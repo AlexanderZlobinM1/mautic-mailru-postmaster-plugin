@@ -1,0 +1,15 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}{{ 'mailru.postmaster.report.title'|trans }} — {{ domain }}{% endblock %}
+
+{% block actions %}
+    <a class="btn btn-secondary" href="{{ path('mautic_mailru_postmaster_report') }}" data-toggle="ajax">
+        <i class="ri-arrow-left-line"></i> {{ 'mautic.core.back'|trans }}
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="pa-md">
+    {% include '@MauticMailRuPostmaster/Report/table.html.twig' with { rows: rows, showDomain: false } %}
+</div>
+{% endblock %}

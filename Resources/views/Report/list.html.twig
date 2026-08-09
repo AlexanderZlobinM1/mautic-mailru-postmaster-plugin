@@ -1,0 +1,15 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}{{ 'mailru.postmaster.report.title'|trans }}{% endblock %}
+
+{% block content %}
+<div class="pa-md">
+    <p class="text-secondary mb-md">{{ 'mailru.postmaster.report.subtitle'|trans }}</p>
+
+    {% if rows is empty %}
+        <div class="alert alert-info">{{ 'mailru.postmaster.report.empty'|trans }}</div>
+    {% else %}
+        {% include '@MauticMailRuPostmaster/Report/table.html.twig' with { rows: rows, showDomain: true } %}
+    {% endif %}
+</div>
+{% endblock %}
