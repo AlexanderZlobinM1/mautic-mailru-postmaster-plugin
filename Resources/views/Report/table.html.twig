@@ -1,5 +1,5 @@
 <div class="table-responsive">
-    {% set showTrend = showTrend|default(true) %}
+    {% set showTrend = showTrend is defined ? showTrend : true %}
     <table class="table table-hover">
         <thead>
         <tr>

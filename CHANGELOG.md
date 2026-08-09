@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+- Hide the trend column in the retained-history domain summary as intended;
+  Twig's `default` filter was treating the explicit `false` flag as empty and
+  restoring the column.
+
 ## 0.5.1
 
 - Clarify in the report that message and complaint counts come from Mail.ru
