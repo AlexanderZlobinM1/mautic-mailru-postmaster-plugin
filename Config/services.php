@@ -21,6 +21,7 @@ return static function (ContainerConfigurator $configurator): void {
             'Config',
             'DependencyInjection',
             'Entity',
+            'Integration/MailRuPostmasterIntegration.php',
             'MauticMailRuPostmasterBundle.php',
             'Resources',
             'Service/GuardResult.php',

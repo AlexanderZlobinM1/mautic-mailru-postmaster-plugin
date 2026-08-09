@@ -11,12 +11,13 @@ use Mautic\PluginBundle\Entity\Plugin;
 use Mautic\PluginBundle\Event\PluginInstallEvent;
 use Mautic\PluginBundle\Event\PluginUpdateEvent;
 use Mautic\PluginBundle\PluginEvents;
-use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterIntegration;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\MailRuPostmasterIntegration;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 final class PluginSubscriber implements EventSubscriberInterface
 {
-    private const BUNDLE = 'MauticMailRuPostmasterBundle';
+    private const BUNDLE      = 'MauticMailRuPostmasterBundle';
+    private const LEGACY_NAME = 'mailru_postmaster';
 
     public function __construct(
         private readonly IntegrationRepository $integrationRepository,
@@ -48,17 +49,22 @@ final class PluginSubscriber implements EventSubscriberInterface
             return;
         }
 
-        if ($this->integrationRepository->findOneByName(PostmasterIntegration::NAME) instanceof Integration) {
+        if ($this->integrationRepository->findOneByName(MailRuPostmasterIntegration::NAME) instanceof Integration) {
             return;
         }
 
-        $integration = new Integration();
-        $integration->setName(PostmasterIntegration::NAME);
+        $integration = $this->integrationRepository->findOneByName(self::LEGACY_NAME);
+        $isNew       = !$integration instanceof Integration;
+        $integration = $isNew ? new Integration() : $integration;
+        $integration->setName(MailRuPostmasterIntegration::NAME);
         $integration->setPlugin($plugin);
-        $integration->setIsPublished(false);
-        $integration->setApiKeys([]);
-        $integration->setFeatureSettings([]);
-        $integration->setSupportedFeatures([]);
+
+        if ($isNew) {
+            $integration->setIsPublished(false);
+            $integration->setApiKeys([]);
+            $integration->setFeatureSettings([]);
+            $integration->setSupportedFeatures([]);
+        }
 
         // Plugin reload persists and flushes the Plugin entity after this event.
         // Persist the related integration in the same unit of work without an early flush.

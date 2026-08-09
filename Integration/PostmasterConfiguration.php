@@ -4,42 +4,37 @@ declare(strict_types=1);
 
 namespace MauticPlugin\MauticMailRuPostmasterBundle\Integration;
 
-use Mautic\IntegrationsBundle\Helper\IntegrationsHelper;
-use Mautic\PluginBundle\Entity\Integration;
+use Mautic\PluginBundle\Helper\IntegrationHelper;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\TokenPayload;
 
 final class PostmasterConfiguration
 {
-    public function __construct(private readonly IntegrationsHelper $integrationsHelper)
+    public function __construct(private readonly IntegrationHelper $integrationHelper)
     {
     }
 
     public function isEnabled(): bool
     {
-        return $this->getConfiguration()->getIsPublished();
+        return $this->getIntegration()->isEnabled();
     }
 
     public function getTokenPayload(): TokenPayload
     {
-        $keys = $this->getConfiguration()->getApiKeys();
-
-        return TokenPayload::fromJson((string) ($keys['token_json'] ?? ''));
+        return TokenPayload::fromJson($this->getIntegration()->getTokenJson());
     }
 
     public function saveTokenPayload(TokenPayload $payload): void
     {
-        $configuration      = $this->getConfiguration();
-        $keys               = $configuration->getApiKeys();
-        $keys['token_json'] = $payload->toJson();
-        $configuration->setApiKeys($keys);
-
-        $this->integrationsHelper->saveIntegrationConfiguration($configuration);
+        $this->getIntegration()->saveTokenPayload($payload);
     }
 
-    private function getConfiguration(): Integration
+    private function getIntegration(): MailRuPostmasterIntegration
     {
-        return $this->integrationsHelper
-            ->getIntegration(PostmasterIntegration::NAME)
-            ->getIntegrationConfiguration();
+        $integration = $this->integrationHelper->getIntegrationObject(MailRuPostmasterIntegration::NAME);
+        if (!$integration instanceof MailRuPostmasterIntegration) {
+            throw new \RuntimeException('Mail.ru Postmaster integration is not registered. Reload Mautic plugins.');
+        }
+
+        return $integration;
     }
 }

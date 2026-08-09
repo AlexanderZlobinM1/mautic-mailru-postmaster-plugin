@@ -1,0 +1,47 @@
+<style>
+    .mailru-postmaster-notes {
+        align-items: flex-start;
+    }
+
+    .mailru-postmaster-notes__body {
+        display: block;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .mailru-postmaster-notes__body p {
+        line-height: 1.45;
+        margin: 0;
+    }
+
+    .mailru-postmaster-notes__body a {
+        font-weight: 600;
+        text-decoration: underline;
+    }
+
+    .sales-snap-plugin-footer {
+        color: #4a4a4a;
+        font-weight: 500;
+        margin-top: 70px;
+        text-align: right;
+    }
+
+    .sales-snap-plugin-footer a {
+        color: inherit;
+        text-decoration: underline;
+    }
+</style>
+
+<div class="alert alert-info mailru-postmaster-notes">
+    <div class="mailru-postmaster-notes__body">
+        <p>
+            {{ 'mailru.postmaster.config.instructions.before'|trans }}
+            <a href="{{ token_url }}" target="_blank" rel="noopener noreferrer">{{ 'mailru.postmaster.config.instructions.link'|trans }}</a>,
+            {{ 'mailru.postmaster.config.instructions.after'|trans }}
+        </p>
+    </div>
+</div>
+
+<div class="sales-snap-plugin-footer">
+    Copyright <a href="https://sales-snap.ru" target="_blank" rel="noopener noreferrer">Sales-snap.ru</a> 2026
+</div>

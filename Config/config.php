@@ -3,13 +3,13 @@
 declare(strict_types=1);
 
 use MauticPlugin\MauticMailRuPostmasterBundle\Controller\ReportController;
-use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterIntegration;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\MailRuPostmasterIntegration;
 
 return [
     'name'        => 'Mail.ru Postmaster',
-    'description' => 'Mail.ru Postmaster domain statistics and automatic campaign protection.',
-    'version'     => '0.1.1',
-    'author'      => 'Alexander Zlobin',
+    'description' => 'Mail.ru Postmaster statistics, reports and automatic campaign protection.',
+    'version'     => '0.2.0',
+    'author'      => 'Sales Snap',
     'routes'      => [
         'main' => [
             'mautic_mailru_postmaster_report' => [
@@ -36,14 +36,32 @@ return [
                     'report:reports:viewown',
                     'report:reports:viewother',
                 ],
-                'checks' => [
-                    'integration' => [
-                        PostmasterIntegration::NAME => [
-                            'enabled' => true,
-                        ],
-                    ],
-                ],
                 'priority' => 19,
+            ],
+        ],
+    ],
+    'services' => [
+        'integrations' => [
+            'mautic.integration.mailrupostmaster' => [
+                'class'     => MailRuPostmasterIntegration::class,
+                'arguments' => [
+                    'event_dispatcher',
+                    'mautic.helper.cache_storage',
+                    'doctrine.orm.entity_manager',
+                    'request_stack',
+                    'router',
+                    'translator',
+                    'logger',
+                    'mautic.helper.encryption',
+                    'mautic.lead.model.lead',
+                    'mautic.lead.model.company',
+                    'mautic.helper.paths',
+                    'mautic.core.model.notification',
+                    'mautic.lead.model.field',
+                    'mautic.plugin.model.integration_entity',
+                    'mautic.lead.model.dnc',
+                    'mautic.lead.field.fields_with_unique_identifier',
+                ],
             ],
         ],
     ],
