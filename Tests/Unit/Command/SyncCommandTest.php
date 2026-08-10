@@ -42,6 +42,23 @@ final class SyncCommandTest extends TestCase
         self::assertFalse($method->invoke($command, $input, new \DateTimeImmutable('2026-08-10 03:00:30')));
     }
 
+    public function testEmergencyForceRescanUsesFullYearBoundary(): void
+    {
+        $input = $this->input([
+            'full' => false,
+            'scheduled-full' => false,
+            'force-rescan' => true,
+            'current-month' => false,
+        ]);
+        $command = (new \ReflectionClass(SyncCommand::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(SyncCommand::class, 'resolveDates');
+
+        [$from, $to] = $method->invoke($command, $input);
+
+        self::assertSame(364, (int) $from->diff($to)->format('%a'));
+        self::assertSame((new \DateTimeImmutable('today'))->format('Y-m-d'), $to->format('Y-m-d'));
+    }
+
     /**
      * @param array<string, mixed> $options
      */

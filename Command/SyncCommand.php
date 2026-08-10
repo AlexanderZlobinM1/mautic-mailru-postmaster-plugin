@@ -33,8 +33,9 @@ final class SyncCommand extends Command
             ->addOption('date-from', null, InputOption::VALUE_REQUIRED, 'Explicit start date in YYYY-MM-DD format.')
             ->addOption('date-to', null, InputOption::VALUE_REQUIRED, 'Explicit end date in YYYY-MM-DD format.')
             ->addOption('current-month', null, InputOption::VALUE_NONE, 'Synchronize only the current calendar month.')
-            ->addOption('full', null, InputOption::VALUE_NONE, 'Synchronize the complete 365-day Mail.ru history.')
-            ->addOption('scheduled-full', null, InputOption::VALUE_NONE, 'Run a full synchronization only when its configured weekly schedule is due.')
+            ->addOption('full', null, InputOption::VALUE_NONE, 'Fill missing months in the complete 365-day Mail.ru history.')
+            ->addOption('scheduled-full', null, InputOption::VALUE_NONE, 'Fill missing history months only when its configured weekly schedule is due.')
+            ->addOption('force-rescan', null, InputOption::VALUE_NONE, 'Emergency rebuild: ignore completion markers and reread the complete 365-day history.')
             ->addOption('schedule-weekday', null, InputOption::VALUE_REQUIRED, 'Override scheduled-full weekday (0=Sunday, 6=Saturday).')
             ->addOption('schedule-time', null, InputOption::VALUE_REQUIRED, 'Override scheduled-full local time in HH:MM format.')
             ->addOption('active-guards', null, InputOption::VALUE_NONE, 'Refresh only sender domains used by active campaign guards.');
@@ -65,7 +66,14 @@ final class SyncCommand extends Command
                 $result = $this->syncService->syncActiveGuardDomains();
             } else {
                 [$dateFrom, $dateTo] = $this->resolveDates($input);
-                $result              = $this->syncService->sync($dateFrom, $dateTo);
+                $result              = $this->syncService->sync(
+                    $dateFrom,
+                    $dateTo,
+                    (bool) $input->getOption('full') || (bool) $input->getOption('scheduled-full'),
+                    (bool) $input->getOption('full')
+                        || (bool) $input->getOption('scheduled-full')
+                        || (bool) $input->getOption('force-rescan'),
+                );
             }
         } catch (\Throwable $exception) {
             $io->error($exception->getMessage());
@@ -126,7 +134,9 @@ final class SyncCommand extends Command
      */
     private function resolveDates(InputInterface $input): array
     {
-        if ((bool) $input->getOption('full') || (bool) $input->getOption('scheduled-full')) {
+        if ((bool) $input->getOption('full')
+            || (bool) $input->getOption('scheduled-full')
+            || (bool) $input->getOption('force-rescan')) {
             $dateTo = new \DateTimeImmutable('today');
 
             return [$dateTo->modify('-364 days'), $dateTo];
@@ -162,6 +172,7 @@ final class SyncCommand extends Command
             (bool) $input->getOption('current-month'),
             (bool) $input->getOption('full'),
             (bool) $input->getOption('scheduled-full'),
+            (bool) $input->getOption('force-rescan'),
         ]);
         if (count($modes) > 1) {
             throw new \InvalidArgumentException('Choose only one synchronization mode.');

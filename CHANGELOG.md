@@ -1,10 +1,22 @@
 # Changelog
 
+## 0.5.5
+
+- Make first-run and scheduled 365-day synchronization a missing-month
+  backfill driven by persistent, successful per-domain/month completion
+  markers rather than the mere presence of a partial daily row.
+- Persist successful empty month reads so the weekly fallback does not keep
+  querying periods where Mail.ru has no statistics. Progress is committed one
+  month at a time so a later API failure resumes at the first unfinished month.
+- Keep current-month refresh and current-day active campaign guard polling
+  independent from the completed-history markers.
+- Add an explicit emergency `--force-rescan` mode that ignores markers and
+  rebuilds the available year; MCD never invokes it automatically.
+
 ## 0.5.4
 
-- Request detailed history separately for every sender domain. Mail.ru's
-  all-domain detailed response only exposed the latest 30 days despite older
-  explicit ranges, while domain-scoped requests return the retained history.
+- Request detailed statistics separately for every sender domain, keeping API
+  reads scoped to the domains actually used by the current Mautic instance.
 - Retry short API `429` responses using Mail.ru's reported availability delay.
 - Serialize regular and full bulk synchronization jobs so an MCD current-month
   run cannot collide with a long first or weekly full sync. Active campaign
