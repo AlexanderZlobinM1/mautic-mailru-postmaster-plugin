@@ -6,6 +6,7 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Tests\Unit\Integration;
 
 use MauticPlugin\MauticMailRuPostmasterBundle\Integration\MailRuPostmasterIntegration;
 use PHPUnit\Framework\TestCase;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
 use Symfony\Component\Form\FormBuilder;
 use Symfony\Component\Form\Forms;
@@ -13,6 +14,21 @@ use Symfony\Component\Validator\Validation;
 
 final class MailRuPostmasterIntegrationTest extends TestCase
 {
+    public function testDescriptionIsTranslated(): void
+    {
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->expects(self::once())
+            ->method('trans')
+            ->with('mailru.postmaster.description')
+            ->willReturn('Translated description');
+
+        $integration = (new \ReflectionClass(MailRuPostmasterIntegration::class))->newInstanceWithoutConstructor();
+        $property    = new \ReflectionProperty($integration, 'translator');
+        $property->setValue($integration, $translator);
+
+        self::assertSame('Translated description', $integration->getDescription());
+    }
+
     public function testCanonicalFormContainsValidatedTokenTextarea(): void
     {
         $integration = (new \ReflectionClass(MailRuPostmasterIntegration::class))->newInstanceWithoutConstructor();

@@ -15,6 +15,7 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStop;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStopRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\EventListener\CampaignSubscriber;
 use Psr\Log\LoggerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class GuardService
 {
@@ -25,6 +26,7 @@ final class GuardService
         private readonly GuardStopRepository $stopRepository,
         private readonly CampaignModel $campaignModel,
         private readonly LoggerInterface $logger,
+        private readonly TranslatorInterface $translator,
     ) {
     }
 
@@ -78,20 +80,20 @@ final class GuardService
         $domain     = $this->emailDomainProvider->getDomainForEmail($emailId);
 
         if (null === $domain) {
-            return GuardResult::pass('The selected email has no valid explicit From address.');
+            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.no_email_domain'));
         }
 
         $stat = $this->statRepository->getLatestForDomain($domain);
         if (!$stat instanceof DomainStat) {
-            return GuardResult::pass('No stored Mail.ru Postmaster statistics for the sender domain.');
+            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.no_stats'));
         }
 
         if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
-            return GuardResult::pass('The latest Mail.ru Postmaster statistic is not from today.');
+            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.not_today'));
         }
 
         if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
-            return GuardResult::pass('The latest Mail.ru Postmaster statistic is stale.');
+            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.stale'));
         }
 
         $breach = $this->findBreach($stat, $properties);
@@ -100,23 +102,26 @@ final class GuardService
         }
 
         $campaign = $event->getCampaign();
-        $reason   = sprintf(
-            'Mail.ru Postmaster stopped campaign "%s": %s for %s is %.4f%%, above %.4f%%.',
-            $campaign->getName(),
-            $breach['metric'],
-            $domain,
-            $breach['actual'],
-            $breach['threshold'],
-        );
+        $metric = $this->translator->trans('mailru.postmaster.guard.metric.'.$breach['metric']);
+        $reason = $this->translator->trans('mailru.postmaster.guard.reason.stopped', [
+            '%campaign%'  => $campaign->getName(),
+            '%metric%'    => $metric,
+            '%domain%'    => $domain,
+            '%actual%'    => number_format($breach['actual'], 4, '.', ''),
+            '%threshold%' => number_format($breach['threshold'], 4, '.', ''),
+        ]);
 
         try {
             $this->campaignModel->transactionalCampaignUnPublish($campaign);
         } catch (CampaignAlreadyUnpublishedException) {
-            return GuardResult::pass('The campaign is already unpublished.');
+            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.already_unpublished'));
         } catch (CampaignVersionMismatchedException $exception) {
-            $this->logger->warning($reason.' Campaign version changed concurrently.', ['exception' => $exception]);
+            $this->logger->warning(
+                $reason.' '.$this->translator->trans('mailru.postmaster.guard.reason.version_changed_log'),
+                ['exception' => $exception],
+            );
 
-            return GuardResult::pass('Campaign version changed concurrently; retry on the next synchronization.');
+            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.version_changed'));
         }
 
         $this->stopRepository->save(GuardStop::create(

@@ -46,12 +46,12 @@ final class ReportController extends CommonController
 
         $domain = DomainNormalizer::normalize($domain);
         if (null === $domain) {
-            throw new NotFoundHttpException('Unknown sender domain.');
+            throw new NotFoundHttpException($this->translator->trans('mailru.postmaster.report.error.unknown_domain'));
         }
 
         $rows = $repository->getRowsForDomain($domain);
         if ([] === $rows) {
-            throw new NotFoundHttpException('No Mail.ru Postmaster statistics for this domain.');
+            throw new NotFoundHttpException($this->translator->trans('mailru.postmaster.report.error.no_domain_stats'));
         }
 
         return $this->delegateView([

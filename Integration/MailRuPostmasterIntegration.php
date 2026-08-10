@@ -37,7 +37,7 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
 
     public function getDescription(): string
     {
-        return '';
+        return $this->translator->trans('mailru.postmaster.description');
     }
 
     public function getAuthenticationType(): string
