@@ -47,7 +47,7 @@ final class CampaignSubscriber implements EventSubscriberInterface
 
     public function onExecute(PendingEvent $pendingEvent): void
     {
-        $result = $this->guardService->evaluate($pendingEvent->getEvent());
+        $result = $this->guardService->evaluate($pendingEvent->getEvent(), source: 'campaign_execution');
         if ($result->stopped) {
             $pendingEvent->failAll($result->reason);
 

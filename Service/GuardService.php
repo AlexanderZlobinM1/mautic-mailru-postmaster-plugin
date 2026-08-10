@@ -35,12 +35,12 @@ final class GuardService
         $stopped = 0;
         $now ??= new \DateTimeImmutable();
 
-        foreach ($this->eventRepository->findBy(['eventType' => CampaignSubscriber::EVENT_TYPE]) as $event) {
+        foreach ($this->eventRepository->findBy(['type' => CampaignSubscriber::EVENT_TYPE]) as $event) {
             if (!$this->isActiveGuard($event, $now)) {
                 continue;
             }
 
-            if ($this->evaluate($event, $now)->stopped) {
+            if ($this->evaluate($event, $now, 'scheduled_sync')->stopped) {
                 ++$stopped;
             }
         }
@@ -55,7 +55,7 @@ final class GuardService
     {
         $now ??= new \DateTimeImmutable();
         $domains = [];
-        foreach ($this->eventRepository->findBy(['eventType' => CampaignSubscriber::EVENT_TYPE]) as $event) {
+        foreach ($this->eventRepository->findBy(['type' => CampaignSubscriber::EVENT_TYPE]) as $event) {
             if (!$this->isActiveGuard($event, $now)) {
                 continue;
             }
@@ -72,7 +72,11 @@ final class GuardService
         return $domains;
     }
 
-    public function evaluate(Event $event, ?\DateTimeImmutable $now = null): GuardResult
+    public function evaluate(
+        Event $event,
+        ?\DateTimeImmutable $now = null,
+        string $source = 'manual',
+    ): GuardResult
     {
         $now ??= new \DateTimeImmutable();
         $properties = $event->getProperties();
@@ -80,25 +84,33 @@ final class GuardService
         $domain     = $this->emailDomainProvider->getDomainForEmail($emailId);
 
         if (null === $domain) {
-            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.no_email_domain'));
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_email_domain');
+
+            return $this->auditResult($event, $source, $now, $emailId, null, $properties, null, 'pass_no_email_domain', $reason);
         }
 
         $stat = $this->statRepository->getLatestForDomain($domain);
         if (!$stat instanceof DomainStat) {
-            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.no_stats'));
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
+
+            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, null, 'pass_no_stats', $reason);
         }
 
         if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
-            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.not_today'));
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.not_today');
+
+            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_not_today', $reason);
         }
 
         if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
-            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.stale'));
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.stale');
+
+            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_stale', $reason);
         }
 
         $breach = $this->findBreach($stat, $properties);
         if (null === $breach) {
-            return GuardResult::pass();
+            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_below_threshold');
         }
 
         $campaign = $event->getCampaign();
@@ -114,14 +126,18 @@ final class GuardService
         try {
             $this->campaignModel->transactionalCampaignUnPublish($campaign);
         } catch (CampaignAlreadyUnpublishedException) {
-            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.already_unpublished'));
+            $alreadyUnpublished = $this->translator->trans('mailru.postmaster.guard.reason.already_unpublished');
+
+            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_already_unpublished', $alreadyUnpublished);
         } catch (CampaignVersionMismatchedException $exception) {
             $this->logger->warning(
                 $reason.' '.$this->translator->trans('mailru.postmaster.guard.reason.version_changed_log'),
                 ['exception' => $exception],
             );
 
-            return GuardResult::pass($this->translator->trans('mailru.postmaster.guard.reason.version_changed'));
+            $versionChanged = $this->translator->trans('mailru.postmaster.guard.reason.version_changed');
+
+            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_version_changed', $versionChanged);
         }
 
         $this->stopRepository->save(GuardStop::create(
@@ -136,7 +152,50 @@ final class GuardService
         ));
         $this->logger->warning($reason);
 
-        return GuardResult::stopped($reason);
+        return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'stopped', $reason, true);
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     */
+    private function auditResult(
+        Event $event,
+        string $source,
+        \DateTimeImmutable $now,
+        int $emailId,
+        ?string $domain,
+        array $properties,
+        ?DomainStat $stat,
+        string $decision,
+        string $reason = '',
+        bool $stopped = false,
+    ): GuardResult
+    {
+        $campaign = $event->getCampaign();
+        $syncedAt = $stat?->getSyncedAt();
+        $this->logger->warning('mailru_postmaster.guard_evaluation', [
+            'source'                       => $source,
+            'decision'                     => $decision,
+            'reason'                       => $reason,
+            'evaluated_at'                 => $now->format(DATE_ATOM),
+            'campaign_id'                  => $campaign->getId(),
+            'campaign_name'                => $campaign->getName(),
+            'guard_event_id'               => $event->getId(),
+            'email_id'                     => $emailId,
+            'domain'                       => $domain,
+            'stat_date'                    => $stat?->getStatDate()->format('Y-m-d'),
+            'stat_synced_at'               => $syncedAt?->format(DATE_ATOM),
+            'stat_age_seconds'             => $syncedAt instanceof \DateTimeImmutable
+                ? max(0, $now->getTimestamp() - $syncedAt->getTimestamp())
+                : null,
+            'messages_sent'                => $stat?->getMessagesSent(),
+            'probably_spam_percent'        => $stat?->getProbablySpamPercent(),
+            'probably_spam_threshold'      => (float) ($properties['probably_spam_threshold'] ?? 100),
+            'spam_percent'                 => $stat?->getSpamPercent(),
+            'spam_threshold'               => (float) ($properties['spam_threshold'] ?? 100),
+        ]);
+
+        return $stopped ? GuardResult::stopped($reason) : GuardResult::pass($reason);
     }
 
     /**

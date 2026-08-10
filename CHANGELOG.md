@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.11
+
+- Log every campaign-guard evaluation with its source, timestamps, campaign,
+  email, domain, stored statistics, thresholds and final decision.
+- Find active Postmaster guards by Mautic's event `type` field so the plugin's
+  scheduled evaluation and active-domain discovery can see saved guard nodes.
+
 ## 0.5.10
 
 - Always list every historical sender domain from this Mautic instance in the
