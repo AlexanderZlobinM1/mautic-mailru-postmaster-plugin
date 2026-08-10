@@ -48,29 +48,35 @@ final class PostmasterSyncService
                 if ($index > 0) {
                     sleep(self::API_REQUEST_SPACING_SECONDS);
                 }
-                foreach ($this->apiClient->getDetailedStatistics($periodFrom, $periodTo) as $domainBlock) {
-                    $domain = DomainNormalizer::normalize((string) ($domainBlock['domain'] ?? ''));
-                    if (null === $domain || !isset($trackedLookup[$domain])) {
-                        continue;
-                    }
-
-                    foreach (($domainBlock['data'] ?? []) as $row) {
-                        if (!is_array($row) || empty($row['date'])) {
+                // Mail.ru's all-domain detailed response is effectively limited to
+                // the latest 30 days even when an older explicit range is passed.
+                // Domain-scoped requests return the complete documented one-year
+                // history and keep every Mautic instance isolated to its senders.
+                foreach ($trackedDomains as $requestedDomain) {
+                    foreach ($this->apiClient->getDetailedStatistics($periodFrom, $periodTo, $requestedDomain) as $domainBlock) {
+                        $domain = DomainNormalizer::normalize((string) ($domainBlock['domain'] ?? ''));
+                        if ($domain !== $requestedDomain || !isset($trackedLookup[$domain])) {
                             continue;
                         }
 
-                        try {
-                            $statDate = new \DateTimeImmutable((string) $row['date']);
-                        } catch (\Exception) {
-                            continue;
-                        }
+                        foreach (($domainBlock['data'] ?? []) as $row) {
+                            if (!is_array($row) || empty($row['date'])) {
+                                continue;
+                            }
 
-                        if ($statDate < $periodFrom || $statDate > $periodTo) {
-                            continue;
-                        }
+                            try {
+                                $statDate = new \DateTimeImmutable((string) $row['date']);
+                            } catch (\Exception) {
+                                continue;
+                            }
 
-                        $this->statRepository->stage($domain, $statDate, $row, $syncedAt);
-                        ++$storedRows;
+                            if ($statDate < $periodFrom || $statDate > $periodTo) {
+                                continue;
+                            }
+
+                            $this->statRepository->stage($domain, $statDate, $row, $syncedAt);
+                            ++$storedRows;
+                        }
                     }
                 }
             }

@@ -43,6 +43,8 @@ final class SyncCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
+        $activeGuards = (bool) $input->getOption('active-guards');
+        $lockHandle = null;
 
         try {
             $this->validateModeOptions($input);
@@ -51,7 +53,14 @@ final class SyncCommand extends Command
 
                 return Command::SUCCESS;
             }
-            $activeGuards = (bool) $input->getOption('active-guards');
+            if (!$activeGuards) {
+                $lockHandle = $this->acquireBulkSyncLock();
+                if (null === $lockHandle) {
+                    $io->writeln('Another Mail.ru Postmaster bulk synchronization is already running.');
+
+                    return Command::SUCCESS;
+                }
+            }
             if ($activeGuards) {
                 $result = $this->syncService->syncActiveGuardDomains();
             } else {
@@ -62,6 +71,11 @@ final class SyncCommand extends Command
             $io->error($exception->getMessage());
 
             return Command::FAILURE;
+        } finally {
+            if (is_resource($lockHandle)) {
+                flock($lockHandle, LOCK_UN);
+                fclose($lockHandle);
+            }
         }
 
         $io->success(sprintf(
@@ -87,6 +101,24 @@ final class SyncCommand extends Command
         );
 
         return Command::SUCCESS;
+    }
+
+    /** @return resource|null */
+    private function acquireBulkSyncLock()
+    {
+        $instanceKey = realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) ?: (string) getcwd();
+        $path = sys_get_temp_dir().'/mautic-mailru-postmaster-'.substr(hash('sha256', $instanceKey), 0, 16).'.lock';
+        $handle = fopen($path, 'c+');
+        if (false === $handle) {
+            throw new \RuntimeException('Cannot create Mail.ru Postmaster synchronization lock.');
+        }
+        if (!flock($handle, LOCK_EX | LOCK_NB)) {
+            fclose($handle);
+
+            return null;
+        }
+
+        return $handle;
     }
 
     /**

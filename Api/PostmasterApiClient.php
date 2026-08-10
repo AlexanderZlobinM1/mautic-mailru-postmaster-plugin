@@ -74,7 +74,12 @@ final class PostmasterApiClient
      *
      * @return array<string, mixed>
      */
-    private function request(string $path, array $query = [], bool $retryAfterRefresh = true): array
+    private function request(
+        string $path,
+        array $query = [],
+        bool $retryAfterRefresh = true,
+        int $rateLimitRetries = 3,
+    ): array
     {
         if (!$this->configuration->isEnabled()) {
             throw new PostmasterApiException('Mail.ru Postmaster integration is disabled.');
@@ -98,15 +103,33 @@ final class PostmasterApiClient
         if (403 === $response->getStatusCode() && $retryAfterRefresh) {
             $this->refreshAccessToken($payload, $now);
 
-            return $this->request($path, $query, false);
+            return $this->request($path, $query, false, $rateLimitRetries);
         }
 
         $data = $this->decodeResponse($response);
+        if (429 === $response->getStatusCode() && $rateLimitRetries > 0) {
+            sleep($this->rateLimitDelay($data));
+
+            return $this->request($path, $query, $retryAfterRefresh, $rateLimitRetries - 1);
+        }
         if ($response->getStatusCode() >= 400 || true !== ($data['ok'] ?? false)) {
             throw new PostmasterApiException($this->errorMessage($data, $response->getStatusCode()));
         }
 
         return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function rateLimitDelay(array $data): int
+    {
+        $detail = (string) ($data['detail'] ?? '');
+        if (1 === preg_match('/Expected available in\s+([0-9]+(?:\.[0-9]+)?)\s+seconds/i', $detail, $matches)) {
+            return max(1, min(30, (int) ceil((float) $matches[1]) + 1));
+        }
+
+        return 7;
     }
 
     private function refreshAccessToken(TokenPayload $payload, \DateTimeImmutable $now): TokenPayload

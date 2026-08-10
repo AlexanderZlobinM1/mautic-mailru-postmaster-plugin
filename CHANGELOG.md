@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4
+
+- Request detailed history separately for every sender domain. Mail.ru's
+  all-domain detailed response only exposed the latest 30 days despite older
+  explicit ranges, while domain-scoped requests return the retained history.
+- Retry short API `429` responses using Mail.ru's reported availability delay.
+- Serialize regular and full bulk synchronization jobs so an MCD current-month
+  run cannot collide with a long first or weekly full sync. Active campaign
+  guard polling remains independent and domain-scoped.
+
 ## 0.5.3
 
 - Remove the duplicate Mail.ru Postmaster section from Mautic's global
