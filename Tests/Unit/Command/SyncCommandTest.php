@@ -10,7 +10,7 @@ use Symfony\Component\Console\Input\InputInterface;
 
 final class SyncCommandTest extends TestCase
 {
-    public function testCurrentMonthUsesCalendarBoundary(): void
+    public function testCurrentMonthUsesRollingThirtyDayBoundary(): void
     {
         $input = $this->input([
             'full' => false,
@@ -25,29 +25,16 @@ final class SyncCommandTest extends TestCase
         [$from, $to] = $method->invoke($command, $input);
 
         $today = new \DateTimeImmutable('today');
-        self::assertSame($today->modify('first day of this month')->format('Y-m-d'), $from->format('Y-m-d'));
+        self::assertSame($today->modify('-29 days')->format('Y-m-d'), $from->format('Y-m-d'));
         self::assertSame($today->format('Y-m-d'), $to->format('Y-m-d'));
     }
 
-    public function testMccScheduleOverrideMatchesSundayMinute(): void
+    public function testDeprecatedFullAliasCannotReadPastRollingWindow(): void
     {
         $input = $this->input([
-            'schedule-weekday' => '0',
-            'schedule-time' => '03:00',
-        ]);
-        $command = (new \ReflectionClass(SyncCommand::class))->newInstanceWithoutConstructor();
-        $method = new \ReflectionMethod(SyncCommand::class, 'isScheduledFullDue');
-
-        self::assertTrue($method->invoke($command, $input, new \DateTimeImmutable('2026-08-09 03:00:30')));
-        self::assertFalse($method->invoke($command, $input, new \DateTimeImmutable('2026-08-10 03:00:30')));
-    }
-
-    public function testEmergencyForceRescanUsesFullYearBoundary(): void
-    {
-        $input = $this->input([
-            'full' => false,
+            'full' => true,
             'scheduled-full' => false,
-            'force-rescan' => true,
+            'force-rescan' => false,
             'current-month' => false,
         ]);
         $command = (new \ReflectionClass(SyncCommand::class))->newInstanceWithoutConstructor();
@@ -55,8 +42,26 @@ final class SyncCommandTest extends TestCase
 
         [$from, $to] = $method->invoke($command, $input);
 
-        self::assertSame(364, (int) $from->diff($to)->format('%a'));
-        self::assertSame((new \DateTimeImmutable('today'))->format('Y-m-d'), $to->format('Y-m-d'));
+        self::assertSame(29, (int) $from->diff($to)->format('%a'));
+    }
+
+    public function testExplicitOldRangeIsRejected(): void
+    {
+        $input = $this->input([
+            'full' => false,
+            'scheduled-full' => false,
+            'force-rescan' => false,
+            'current-month' => false,
+            'date-from' => (new \DateTimeImmutable('today'))->modify('-30 days')->format('Y-m-d'),
+            'date-to' => (new \DateTimeImmutable('today'))->format('Y-m-d'),
+        ]);
+        $command = (new \ReflectionClass(SyncCommand::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(SyncCommand::class, 'resolveDates');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('rolling last 30 days');
+
+        $method->invoke($command, $input);
     }
 
     /**

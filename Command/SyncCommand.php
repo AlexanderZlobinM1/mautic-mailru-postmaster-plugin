@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace MauticPlugin\MauticMailRuPostmasterBundle\Command;
 
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\PostmasterSyncService;
-use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -21,7 +20,6 @@ final class SyncCommand extends Command
 {
     public function __construct(
         private readonly PostmasterSyncService $syncService,
-        private readonly PostmasterConfiguration $configuration,
     ) {
         parent::__construct();
     }
@@ -29,15 +27,15 @@ final class SyncCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addOption('days', null, InputOption::VALUE_REQUIRED, 'Number of days to synchronize, including today.', '30')
+            ->addOption('days', null, InputOption::VALUE_REQUIRED, 'Number of recent days to synchronize (1-30), including today.', '30')
             ->addOption('date-from', null, InputOption::VALUE_REQUIRED, 'Explicit start date in YYYY-MM-DD format.')
             ->addOption('date-to', null, InputOption::VALUE_REQUIRED, 'Explicit end date in YYYY-MM-DD format.')
-            ->addOption('current-month', null, InputOption::VALUE_NONE, 'Synchronize only the current calendar month.')
-            ->addOption('full', null, InputOption::VALUE_NONE, 'Fill missing months in the complete 365-day Mail.ru history.')
-            ->addOption('scheduled-full', null, InputOption::VALUE_NONE, 'Fill missing history months only when its configured weekly schedule is due.')
-            ->addOption('force-rescan', null, InputOption::VALUE_NONE, 'Emergency rebuild: ignore completion markers and reread the complete 365-day history.')
-            ->addOption('schedule-weekday', null, InputOption::VALUE_REQUIRED, 'Override scheduled-full weekday (0=Sunday, 6=Saturday).')
-            ->addOption('schedule-time', null, InputOption::VALUE_REQUIRED, 'Override scheduled-full local time in HH:MM format.')
+            ->addOption('current-month', null, InputOption::VALUE_NONE, 'Synchronize the rolling 30-day window exposed by Mail.ru.')
+            ->addOption('full', null, InputOption::VALUE_NONE, 'Deprecated compatibility alias for the rolling 30-day window.')
+            ->addOption('scheduled-full', null, InputOption::VALUE_NONE, 'Deprecated MCD compatibility alias for the rolling 30-day window.')
+            ->addOption('force-rescan', null, InputOption::VALUE_NONE, 'Deprecated compatibility alias for the rolling 30-day window.')
+            ->addOption('schedule-weekday', null, InputOption::VALUE_REQUIRED, 'Deprecated compatibility option; ignored.')
+            ->addOption('schedule-time', null, InputOption::VALUE_REQUIRED, 'Deprecated compatibility option; ignored.')
             ->addOption('active-guards', null, InputOption::VALUE_NONE, 'Refresh only sender domains used by active campaign guards.');
     }
 
@@ -49,11 +47,6 @@ final class SyncCommand extends Command
 
         try {
             $this->validateModeOptions($input);
-            if ((bool) $input->getOption('scheduled-full') && !$this->isScheduledFullDue($input)) {
-                $io->writeln('Full synchronization is not due in the current minute.');
-
-                return Command::SUCCESS;
-            }
             if (!$activeGuards) {
                 $lockHandle = $this->acquireBulkSyncLock();
                 if (null === $lockHandle) {
@@ -65,31 +58,8 @@ final class SyncCommand extends Command
             if ($activeGuards) {
                 $result = $this->syncService->syncActiveGuardDomains();
             } else {
-                $initialBackfill = (bool) $input->getOption('current-month')
-                    && $this->syncService->requiresInitialBackfill();
-                [$dateFrom, $dateTo] = $initialBackfill
-                    ? $this->fullDates()
-                    : $this->resolveDates($input);
-                $result              = $this->syncService->sync(
-                    $dateFrom,
-                    $dateTo,
-                    $initialBackfill
-                        || (bool) $input->getOption('full')
-                        || (bool) $input->getOption('scheduled-full'),
-                    $initialBackfill
-                        || (bool) $input->getOption('full')
-                        || (bool) $input->getOption('scheduled-full')
-                        || (bool) $input->getOption('force-rescan'),
-                );
-                if ($initialBackfill
-                    || (bool) $input->getOption('full')
-                    || (bool) $input->getOption('scheduled-full')
-                    || (bool) $input->getOption('force-rescan')) {
-                    // Written only after the whole backfill returns without an
-                    // exception. A failed first run therefore resumes through
-                    // the missing month markers on the next routine invocation.
-                    $this->syncService->markInitialBackfillCompleted();
-                }
+                [$dateFrom, $dateTo] = $this->resolveDates($input);
+                $result = $this->syncService->sync($dateFrom, $dateTo);
             }
         } catch (\Throwable $exception) {
             $io->error($exception->getMessage());
@@ -150,17 +120,13 @@ final class SyncCommand extends Command
      */
     private function resolveDates(InputInterface $input): array
     {
-        if ((bool) $input->getOption('full')
+        if ((bool) $input->getOption('current-month')
+            || (bool) $input->getOption('full')
             || (bool) $input->getOption('scheduled-full')
             || (bool) $input->getOption('force-rescan')) {
             $dateTo = new \DateTimeImmutable('today');
 
-            return [$dateTo->modify('-364 days'), $dateTo];
-        }
-        if ((bool) $input->getOption('current-month')) {
-            $dateTo = new \DateTimeImmutable('today');
-
-            return [$dateTo->modify('first day of this month'), $dateTo];
+            return [$dateTo->modify('-29 days'), $dateTo];
         }
         $dateToValue   = $input->getOption('date-to');
         $dateFromValue = $input->getOption('date-from');
@@ -170,23 +136,25 @@ final class SyncCommand extends Command
             $dateFrom = new \DateTimeImmutable($dateFromValue);
         } else {
             $days = filter_var($input->getOption('days'), FILTER_VALIDATE_INT, [
-                'options' => ['min_range' => 1, 'max_range' => 365],
+                'options' => ['min_range' => 1, 'max_range' => 30],
             ]);
             if (false === $days) {
-                throw new \InvalidArgumentException('--days must be between 1 and 365.');
+                throw new \InvalidArgumentException('--days must be between 1 and 30.');
             }
             $dateFrom = $dateTo->modify(sprintf('-%d days', $days - 1));
         }
 
-        return [$dateFrom->setTime(0, 0), $dateTo->setTime(0, 0)];
-    }
+        $dateFrom = $dateFrom->setTime(0, 0);
+        $dateTo = $dateTo->setTime(0, 0);
+        $today = new \DateTimeImmutable('today');
+        if ($dateFrom > $dateTo) {
+            throw new \InvalidArgumentException('date-from must not be later than date-to.');
+        }
+        if ($dateTo > $today || $dateFrom < $today->modify('-29 days')) {
+            throw new \InvalidArgumentException('Mail.ru exposes only the rolling last 30 days.');
+        }
 
-    /** @return array{0: \DateTimeImmutable, 1: \DateTimeImmutable} */
-    private function fullDates(): array
-    {
-        $dateTo = new \DateTimeImmutable('today');
-
-        return [$dateTo->modify('-364 days'), $dateTo];
+        return [$dateFrom, $dateTo];
     }
 
     private function validateModeOptions(InputInterface $input): void
@@ -201,30 +169,5 @@ final class SyncCommand extends Command
         if (count($modes) > 1) {
             throw new \InvalidArgumentException('Choose only one synchronization mode.');
         }
-    }
-
-    private function isScheduledFullDue(InputInterface $input, ?\DateTimeImmutable $now = null): bool
-    {
-        $weekdayOption = $input->getOption('schedule-weekday');
-        $weekday = null !== $weekdayOption
-            ? filter_var($weekdayOption, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 6]])
-            : $this->configuration->getFullSyncWeekday();
-        if (false === $weekday) {
-            throw new \InvalidArgumentException('--schedule-weekday must be between 0 and 6.');
-        }
-
-        $timeOption = $input->getOption('schedule-time');
-        $time = is_string($timeOption) && '' !== $timeOption
-            ? $timeOption
-            : $this->configuration->getFullSyncTime();
-        if (1 !== preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/', $time)) {
-            throw new \InvalidArgumentException('--schedule-time must use HH:MM format.');
-        }
-
-        $now ??= new \DateTimeImmutable();
-        // PHP N: Monday=1..Sunday=7; public setting: Sunday=0..Saturday=6.
-        $currentWeekday = (int) $now->format('N') % 7;
-
-        return $currentWeekday === (int) $weekday && $now->format('H:i') === $time;
     }
 }

@@ -26,19 +26,12 @@ final class MailRuPostmasterIntegrationTest extends TestCase
         $form = $builder->getForm();
 
         self::assertTrue($form->has(MailRuPostmasterIntegration::TOKEN_JSON_FIELD));
-        self::assertTrue($form->has(MailRuPostmasterIntegration::RETENTION_DAYS_FIELD));
-        self::assertTrue($form->has(MailRuPostmasterIntegration::FULL_SYNC_WEEKDAY_FIELD));
-        self::assertTrue($form->has(MailRuPostmasterIntegration::FULL_SYNC_TIME_FIELD));
-        self::assertSame(
-            MailRuPostmasterIntegration::DEFAULT_RETENTION_DAYS,
-            $form->get(MailRuPostmasterIntegration::RETENTION_DAYS_FIELD)->getData(),
-        );
+        self::assertFalse($form->has(MailRuPostmasterIntegration::RETENTION_DAYS_FIELD));
+        self::assertFalse($form->has(MailRuPostmasterIntegration::FULL_SYNC_WEEKDAY_FIELD));
+        self::assertFalse($form->has(MailRuPostmasterIntegration::FULL_SYNC_TIME_FIELD));
 
         $form->submit([
             MailRuPostmasterIntegration::TOKEN_JSON_FIELD => 'not-json',
-            MailRuPostmasterIntegration::RETENTION_DAYS_FIELD => 365,
-            MailRuPostmasterIntegration::FULL_SYNC_WEEKDAY_FIELD => 0,
-            MailRuPostmasterIntegration::FULL_SYNC_TIME_FIELD => '03:00',
         ]);
         self::assertGreaterThan(0, $form->get(MailRuPostmasterIntegration::TOKEN_JSON_FIELD)->getErrors(true)->count());
     }

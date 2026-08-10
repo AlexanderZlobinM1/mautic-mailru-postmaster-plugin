@@ -6,9 +6,7 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Integration;
 
 use Mautic\PluginBundle\Integration\AbstractIntegration;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\TokenPayload;
-use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
-use Symfony\Component\Form\Extension\Core\Type\TimeType;
 use Symfony\Component\Form\Form;
 use Symfony\Component\Form\FormBuilder;
 use Symfony\Component\Form\FormInterface;
@@ -21,7 +19,7 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
     public const NAME             = 'MailRuPostmaster';
     public const TOKEN_JSON_FIELD = 'token_json';
     public const RETENTION_DAYS_FIELD = 'retention_days';
-    public const DEFAULT_RETENTION_DAYS = 365;
+    public const DEFAULT_RETENTION_DAYS = 30;
     public const FULL_SYNC_WEEKDAY_FIELD = 'full_sync_weekday';
     public const FULL_SYNC_TIME_FIELD = 'full_sync_time';
     public const DEFAULT_FULL_SYNC_WEEKDAY = 0;
@@ -112,58 +110,6 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
                 }),
             ],
         ]);
-
-        $builder->add(self::RETENTION_DAYS_FIELD, ChoiceType::class, [
-            'label'      => 'mailru.postmaster.config.retention_days',
-            'label_attr' => ['class' => 'control-label'],
-            'required'   => true,
-            'data'       => (int) ($data[self::RETENTION_DAYS_FIELD] ?? self::DEFAULT_RETENTION_DAYS),
-            'choices'    => [
-                'mailru.postmaster.config.retention_days.30'  => 30,
-                'mailru.postmaster.config.retention_days.90'  => 90,
-                'mailru.postmaster.config.retention_days.180' => 180,
-                'mailru.postmaster.config.retention_days.365' => 365,
-            ],
-            'attr' => [
-                'class'   => 'form-control',
-                'tooltip' => 'mailru.postmaster.config.retention_days.help',
-            ],
-        ]);
-
-        $builder->add(self::FULL_SYNC_WEEKDAY_FIELD, ChoiceType::class, [
-            'label'      => 'mailru.postmaster.config.full_sync_weekday',
-            'label_attr' => ['class' => 'control-label'],
-            'required'   => true,
-            'data'       => (int) ($data[self::FULL_SYNC_WEEKDAY_FIELD] ?? self::DEFAULT_FULL_SYNC_WEEKDAY),
-            'choices'    => [
-                'mailru.postmaster.weekday.sunday'    => 0,
-                'mailru.postmaster.weekday.monday'    => 1,
-                'mailru.postmaster.weekday.tuesday'   => 2,
-                'mailru.postmaster.weekday.wednesday' => 3,
-                'mailru.postmaster.weekday.thursday'  => 4,
-                'mailru.postmaster.weekday.friday'    => 5,
-                'mailru.postmaster.weekday.saturday'  => 6,
-            ],
-            'attr' => [
-                'class'   => 'form-control',
-                'tooltip' => 'mailru.postmaster.config.full_sync_schedule.help',
-            ],
-        ]);
-
-        $builder->add(self::FULL_SYNC_TIME_FIELD, TimeType::class, [
-            'label'        => 'mailru.postmaster.config.full_sync_time',
-            'label_attr'   => ['class' => 'control-label'],
-            'required'     => true,
-            'input'        => 'string',
-            'input_format' => 'H:i',
-            'widget'       => 'single_text',
-            'with_seconds' => false,
-            'data'         => (string) ($data[self::FULL_SYNC_TIME_FIELD] ?? self::DEFAULT_FULL_SYNC_TIME),
-            'attr'         => [
-                'class'   => 'form-control',
-                'tooltip' => 'mailru.postmaster.config.full_sync_schedule.help',
-            ],
-        ]);
     }
 
     /**
@@ -198,9 +144,7 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
 
     public function getRetentionDays(): int
     {
-        $days = (int) ($this->keys[self::RETENTION_DAYS_FIELD] ?? self::DEFAULT_RETENTION_DAYS);
-
-        return in_array($days, [30, 90, 180, 365], true) ? $days : self::DEFAULT_RETENTION_DAYS;
+        return self::DEFAULT_RETENTION_DAYS;
     }
 
     public function getFullSyncWeekday(): int
@@ -237,9 +181,7 @@ final class MailRuPostmasterIntegration extends AbstractIntegration
     ): void {
         $keys = $this->keys;
         $keys[self::TOKEN_JSON_FIELD] = trim($tokenJson);
-        $keys[self::RETENTION_DAYS_FIELD] = in_array($retentionDays, [30, 90, 180, 365], true)
-            ? $retentionDays
-            : self::DEFAULT_RETENTION_DAYS;
+        $keys[self::RETENTION_DAYS_FIELD] = self::DEFAULT_RETENTION_DAYS;
         $keys[self::FULL_SYNC_WEEKDAY_FIELD] = $fullSyncWeekday >= 0 && $fullSyncWeekday <= 6
             ? $fullSyncWeekday
             : self::DEFAULT_FULL_SYNC_WEEKDAY;

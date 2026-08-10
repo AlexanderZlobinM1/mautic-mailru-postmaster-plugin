@@ -11,6 +11,8 @@ use Mautic\CoreBundle\Entity\CommonRepository;
  */
 final class DomainStatRepository extends CommonRepository
 {
+    private const REPORT_WINDOW_DAYS = 30;
+
     /**
      * @param array<string, mixed> $data
      */
@@ -70,13 +72,14 @@ final class DomainStatRepository extends CommonRepository
     public function getLatestRows(): array
     {
         $table = MAUTIC_TABLE_PREFIX.'mailru_postmaster_stats';
+        $cutoff = $this->reportCutoff();
         $sql   = <<<SQL
             SELECT s.*
             FROM {$table} s
             INNER JOIN (
                 SELECT domain, MAX(stat_date) AS latest_date
                 FROM {$table}
-                WHERE is_tracked = 1
+                WHERE is_tracked = 1 AND stat_date >= :cutoff
                 GROUP BY domain
             ) latest ON latest.domain = s.domain AND latest.latest_date = s.stat_date
             WHERE s.is_tracked = 1
@@ -84,11 +87,13 @@ final class DomainStatRepository extends CommonRepository
             SQL;
 
         $connection = $this->getEntityManager()->getConnection();
-        $rows = $connection->executeQuery($sql)->fetchAllAssociative();
+        $rows = $connection->executeQuery($sql, ['cutoff' => $cutoff])->fetchAllAssociative();
         $totals = $connection->createQueryBuilder()
             ->select('domain', 'SUM(messages_sent) AS messages_sent_total', 'SUM(complaints) AS complaints_total')
             ->from($table)
             ->where('is_tracked = 1')
+            ->andWhere('stat_date >= :cutoff')
+            ->setParameter('cutoff', $cutoff)
             ->groupBy('domain')
             ->executeQuery()
             ->fetchAllAssociativeIndexed();
@@ -116,11 +121,18 @@ final class DomainStatRepository extends CommonRepository
             ->from(MAUTIC_TABLE_PREFIX.'mailru_postmaster_stats')
             ->where('domain = :domain')
             ->andWhere('is_tracked = 1')
+            ->andWhere('stat_date >= :cutoff')
             ->setParameter('domain', $domain)
+            ->setParameter('cutoff', $this->reportCutoff())
             ->orderBy('stat_date', 'DESC')
             ->setMaxResults($limit)
             ->executeQuery()
             ->fetchAllAssociative();
+    }
+
+    private function reportCutoff(): string
+    {
+        return (new \DateTimeImmutable('today'))->modify(sprintf('-%d days', self::REPORT_WINDOW_DAYS - 1))->format('Y-m-d');
     }
 
     /**

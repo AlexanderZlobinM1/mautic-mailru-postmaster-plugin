@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.7
+
+- Match the verified live API behavior: synchronize, store, aggregate and show
+  only the rolling last 30 days. No routine or emergency command reads deeper
+  history.
+- Keep legacy `--full`, `--scheduled-full` and `--force-rescan` flags as safe
+  compatibility aliases for the same 30-day window so an older scheduler
+  configuration cannot trigger deep reads.
+- Remove retention and weekly-history fields from the plugin tile; global
+  settings return to the canonical enable switch, token and short instructions.
+- Prune previously stored older statistics after making a database backup on
+  the upgraded instance.
+
 ## 0.5.6
 
 - Move first-run detection entirely into the plugin. MCD only invokes the
