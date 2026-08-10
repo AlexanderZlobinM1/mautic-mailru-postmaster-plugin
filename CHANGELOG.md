@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.10
+
+- Always list every historical sender domain from this Mautic instance in the
+  Postmaster report, even when Mail.ru has returned no statistics for it.
+- Display zero-valued current-day placeholders for sender domains without API
+  data and allow their domain detail page to open normally.
+
 ## 0.5.8
 
 - Make the legacy minute-level `--scheduled-full` MCD probe an API-free no-op.

@@ -7,14 +7,21 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Controller;
 use Mautic\CoreBundle\Controller\CommonController;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\DomainNormalizer;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\EmailDomainProvider;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\ReportPeriodGrouper;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\ReportRowFiller;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 final class ReportController extends CommonController
 {
-    public function indexAction(Request $request, DomainStatRepository $repository): Response
+    public function indexAction(
+        Request $request,
+        DomainStatRepository $repository,
+        EmailDomainProvider $domainProvider,
+        ReportRowFiller $rowFiller,
+    ): Response
     {
         if (!$this->mayViewReports()) {
             return $this->accessDenied();
@@ -22,7 +29,7 @@ final class ReportController extends CommonController
 
         return $this->delegateView([
             'viewParameters' => [
-                'rows' => $repository->getLatestRows(),
+                'rows' => $rowFiller->fillLatestRows($domainProvider->getDomains(), $repository->getLatestRows()),
             ],
             'contentTemplate' => '@MauticMailRuPostmaster/Report/list.html.twig',
             'passthroughVars' => [
@@ -37,7 +44,9 @@ final class ReportController extends CommonController
         Request $request,
         string $domain,
         DomainStatRepository $repository,
+        EmailDomainProvider $domainProvider,
         ReportPeriodGrouper $periodGrouper,
+        ReportRowFiller $rowFiller,
     ): Response
     {
         if (!$this->mayViewReports()) {
@@ -45,14 +54,11 @@ final class ReportController extends CommonController
         }
 
         $domain = DomainNormalizer::normalize($domain);
-        if (null === $domain) {
+        if (null === $domain || !in_array($domain, $domainProvider->getDomains(), true)) {
             throw new NotFoundHttpException($this->translator->trans('mailru.postmaster.report.error.unknown_domain'));
         }
 
-        $rows = $repository->getRowsForDomain($domain);
-        if ([] === $rows) {
-            throw new NotFoundHttpException($this->translator->trans('mailru.postmaster.report.error.no_domain_stats'));
-        }
+        $rows = $rowFiller->fillDomainRows($domain, $repository->getRowsForDomain($domain));
 
         return $this->delegateView([
             'viewParameters' => [

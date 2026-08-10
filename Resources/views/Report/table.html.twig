@@ -14,9 +14,10 @@
         </thead>
         <tbody>
         {% for row in rows %}
+            {% set hasStatistics = row.has_statistics is defined ? row.has_statistics : true %}
             {% set spam = row.spam_percent + 0 %}
             {% set probablySpam = row.probably_spam_percent + 0 %}
-            {% set delivered = 100 - spam - probablySpam %}
+            {% set delivered = hasStatistics ? 100 - spam - probablySpam : 0 %}
             {% if delivered < 0 %}{% set delivered = 0 %}{% endif %}
             <tr>
                 {% if showDomain %}
