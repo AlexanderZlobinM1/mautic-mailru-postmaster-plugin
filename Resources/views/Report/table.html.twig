@@ -39,9 +39,13 @@
                 {% endif %}
                 <td style="min-width: 260px">
                     <div class="d-flex" style="height: 28px; overflow: hidden; border-radius: 2px">
-                        {% if delivered > 0 %}<div class="bg-success pa-xs" style="width: {{ delivered }}%" title="{{ delivered|number_format(2, ',', ' ') }}%">{{ delivered|number_format(1, ',', ' ') }}</div>{% endif %}
-                        {% if probablySpam > 0 %}<div class="bg-warning pa-xs" style="width: {{ probablySpam }}%" title="{{ 'mailru.postmaster.report.probably_spam'|trans }}: {{ probablySpam|number_format(2, ',', ' ') }}%">{{ probablySpam|number_format(1, ',', ' ') }}</div>{% endif %}
-                        {% if spam > 0 %}<div class="bg-danger pa-xs" style="width: {{ spam }}%" title="{{ 'mailru.postmaster.report.spam'|trans }}: {{ spam|number_format(2, ',', ' ') }}%">{{ spam|number_format(1, ',', ' ') }}</div>{% endif %}
+                        {% if not hasStatistics %}
+                            <div class="pa-xs text-secondary">0,0</div>
+                        {% else %}
+                            {% if delivered > 0 %}<div class="bg-success pa-xs" style="width: {{ delivered }}%" title="{{ delivered|number_format(2, ',', ' ') }}%">{{ delivered|number_format(1, ',', ' ') }}</div>{% endif %}
+                            {% if probablySpam > 0 %}<div class="bg-warning pa-xs" style="width: {{ probablySpam }}%" title="{{ 'mailru.postmaster.report.probably_spam'|trans }}: {{ probablySpam|number_format(2, ',', ' ') }}%">{{ probablySpam|number_format(1, ',', ' ') }}</div>{% endif %}
+                            {% if spam > 0 %}<div class="bg-danger pa-xs" style="width: {{ spam }}%" title="{{ 'mailru.postmaster.report.spam'|trans }}: {{ spam|number_format(2, ',', ' ') }}%">{{ spam|number_format(1, ',', ' ') }}</div>{% endif %}
+                        {% endif %}
                     </div>
                 </td>
             </tr>
