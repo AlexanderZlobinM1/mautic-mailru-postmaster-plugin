@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.12
+
+- Route every campaign-guard decision to a dedicated 30-day rotating audit
+  file. The standard production handler buffers warnings until an error and
+  therefore did not persist successful guard stops reliably.
+
 ## 0.5.11
 
 - Log every campaign-guard evaluation with its source, timestamps, campaign,
