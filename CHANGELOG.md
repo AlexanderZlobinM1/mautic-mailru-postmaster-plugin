@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.8
+
+- Make the legacy minute-level `--scheduled-full` MCD probe an API-free no-op.
+  This preserves compatibility with MCD 0.10.30 without changing agent code or
+  consuming the Mail.ru rate limit.
+
 ## 0.5.7
 
 - Match the verified live API behavior: synchronize, store, aggregate and show
