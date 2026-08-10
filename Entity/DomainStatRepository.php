@@ -37,6 +37,11 @@ final class DomainStatRepository extends CommonRepository
     public function getLatestForDomain(string $domain): ?DomainStat
     {
         $stat = $this->findOneBy(['domain' => $domain, 'isTracked' => true], ['statDate' => 'DESC']);
+        if ($stat instanceof DomainStat) {
+            // A parallel campaign trigger may have refreshed this same
+            // domain/day row. Reload managed state before a send decision.
+            $this->getEntityManager()->refresh($stat);
+        }
 
         return $stat instanceof DomainStat ? $stat : null;
     }

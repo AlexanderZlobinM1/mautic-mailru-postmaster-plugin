@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.15
+
+- Replace the campaign guard email selector with an explicit sender-domain
+  selector populated only from domains actually used by this Mautic instance.
+- Resolve legacy email-based guard nodes at runtime and prefill their domain
+  when edited, so existing campaigns keep working until they are saved again.
+- Show the selected domain directly on the campaign guard node.
+
+## 0.5.14
+
+- Start a detached campaign watcher from Mautic's normal campaign trigger, so
+  fast guard polling no longer requires MCD or a separate cron.
+- Keep API latency completely outside the email path: neither email batches nor
+  individual messages wait for Mail.ru statistics.
+- Serialize runtime API reads across watcher processes with one shared,
+  non-blocking seven-second domain lock. A competing watcher skips immediately
+  instead of delaying campaign throughput.
+- Stop the campaign when a fresh watcher response breaches its threshold while
+  allowing messages already moving during Mail.ru's reporting delay to finish.
+- Reload managed domain statistics before each new poll generation so parallel
+  watcher processes see the result written by the process that queried Mail.ru.
+- Hide delayed/date scheduling controls for guard nodes; protection is always
+  configured as an immediate action directly before the protected email.
+
+## 0.5.13
+
+- Persisted as an internal development build while moving runtime polling from
+  the scheduler into the plugin.
+
 ## 0.5.12
 
 - Route every campaign-guard decision to a dedicated 30-day rotating audit

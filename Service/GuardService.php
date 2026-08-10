@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MauticPlugin\MauticMailRuPostmasterBundle\Service;
 
+use Doctrine\ORM\EntityManagerInterface;
 use Mautic\CampaignBundle\Entity\Event;
 use Mautic\CampaignBundle\Entity\EventRepository;
 use Mautic\CampaignBundle\Model\CampaignModel;
@@ -21,7 +22,8 @@ final class GuardService
 {
     public function __construct(
         private readonly EventRepository $eventRepository,
-        private readonly EmailDomainProvider $emailDomainProvider,
+        private readonly EntityManagerInterface $entityManager,
+        private readonly GuardDomainResolver $domainResolver,
         private readonly DomainStatRepository $statRepository,
         private readonly GuardStopRepository $stopRepository,
         private readonly CampaignModel $campaignModel,
@@ -59,8 +61,7 @@ final class GuardService
             if (!$this->isActiveGuard($event, $now)) {
                 continue;
             }
-            $properties = $event->getProperties();
-            $domain = $this->emailDomainProvider->getDomainForEmail((int) ($properties['email'] ?? 0));
+            $domain = $this->domainResolver->resolve($event);
             if (null !== $domain) {
                 $domains[$domain] = true;
             }
@@ -72,6 +73,39 @@ final class GuardService
         return $domains;
     }
 
+    /**
+     * @return list<Event>
+     */
+    public function getActiveGuardsForCampaign(int $campaignId, ?\DateTimeImmutable $now = null): array
+    {
+        $now ??= new \DateTimeImmutable();
+        $guards = [];
+        foreach ($this->eventRepository->findBy([
+            'campaign' => $campaignId,
+            'type'     => CampaignSubscriber::EVENT_TYPE,
+        ]) as $event) {
+            if (!$event instanceof Event) {
+                continue;
+            }
+
+            // A detached watcher is long-lived relative to a normal request;
+            // explicitly reload campaign publication state on every pass.
+            $this->entityManager->refresh($event);
+            $campaign = $event->getCampaign();
+            $this->entityManager->refresh($campaign);
+            if ($this->isActiveGuard($event, $now)) {
+                $guards[] = $event;
+            }
+        }
+
+        return $guards;
+    }
+
+    public function hasActiveGuardForCampaign(int $campaignId): bool
+    {
+        return [] !== $this->getActiveGuardsForCampaign($campaignId);
+    }
+
     public function evaluate(
         Event $event,
         ?\DateTimeImmutable $now = null,
@@ -80,13 +114,13 @@ final class GuardService
     {
         $now ??= new \DateTimeImmutable();
         $properties = $event->getProperties();
-        $emailId    = (int) ($properties['email'] ?? 0);
-        $domain     = $this->emailDomainProvider->getDomainForEmail($emailId);
+        $emailId    = $this->domainResolver->getLegacyEmailId($event);
+        $domain     = $this->domainResolver->resolve($event);
 
         if (null === $domain) {
-            $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_email_domain');
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_domain');
 
-            return $this->auditResult($event, $source, $now, $emailId, null, $properties, null, 'pass_no_email_domain', $reason);
+            return $this->auditResult($event, $source, $now, $emailId, null, $properties, null, 'pass_no_domain', $reason);
         }
 
         $stat = $this->statRepository->getLatestForDomain($domain);
@@ -128,7 +162,17 @@ final class GuardService
         } catch (CampaignAlreadyUnpublishedException) {
             $alreadyUnpublished = $this->translator->trans('mailru.postmaster.guard.reason.already_unpublished');
 
-            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_already_unpublished', $alreadyUnpublished);
+            return $this->auditResult(
+                $event,
+                $source,
+                $now,
+                $emailId,
+                $domain,
+                $properties,
+                $stat,
+                'pass_already_unpublished',
+                $alreadyUnpublished,
+            );
         } catch (CampaignVersionMismatchedException $exception) {
             $this->logger->warning(
                 $reason.' '.$this->translator->trans('mailru.postmaster.guard.reason.version_changed_log'),
@@ -137,7 +181,17 @@ final class GuardService
 
             $versionChanged = $this->translator->trans('mailru.postmaster.guard.reason.version_changed');
 
-            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_version_changed', $versionChanged);
+            return $this->auditResult(
+                $event,
+                $source,
+                $now,
+                $emailId,
+                $domain,
+                $properties,
+                $stat,
+                'pass_version_changed',
+                $versionChanged,
+            );
         }
 
         $this->stopRepository->save(GuardStop::create(
@@ -181,7 +235,7 @@ final class GuardService
             'campaign_id'                  => $campaign->getId(),
             'campaign_name'                => $campaign->getName(),
             'guard_event_id'               => $event->getId(),
-            'email_id'                     => $emailId,
+            'email_id'                     => $emailId > 0 ? $emailId : null,
             'domain'                       => $domain,
             'stat_date'                    => $stat?->getStatDate()->format('Y-m-d'),
             'stat_synced_at'               => $syncedAt?->format(DATE_ATOM),

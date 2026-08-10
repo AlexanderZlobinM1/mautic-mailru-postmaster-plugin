@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 use Doctrine\Bundle\DoctrineBundle\DependencyInjection\Compiler\ServiceRepositoryCompilerPass;
 use Mautic\CoreBundle\DependencyInjection\MauticCoreExtension;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\CampaignWatchRegistry;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardWatcherLauncher;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\RuntimeApiThrottle;
 use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -29,6 +33,8 @@ return static function (ContainerConfigurator $configurator): void {
             'MauticMailRuPostmasterBundle.php',
             'Resources',
             'Service/GuardResult.php',
+            'Service/RuntimePollResult.php',
+            'Service/RuntimeThrottleResult.php',
             'Service/SyncResult.php',
             'Tests',
         ])).'}');
@@ -49,4 +55,18 @@ return static function (ContainerConfigurator $configurator): void {
 
     $services->get(GuardService::class)
         ->arg('$logger', service('mailru.postmaster.guard_audit_logger'));
+
+    $services->get(GuardRuntimePoller::class)
+        ->arg('$logger', service('mailru.postmaster.guard_audit_logger'));
+
+    $services->get(GuardWatcherLauncher::class)
+        ->arg('$logger', service('mailru.postmaster.guard_audit_logger'))
+        ->arg('$consolePath', '%kernel.project_dir%/bin/console');
+
+    $services->get(CampaignWatchRegistry::class)
+        ->arg('$stateDir', '%kernel.cache_dir%/mailru-postmaster-runtime/watchers');
+
+    $services->get(RuntimeApiThrottle::class)
+        ->arg('$stateDir', '%kernel.cache_dir%/mailru-postmaster-runtime')
+        ->arg('$intervalSeconds', 7);
 };

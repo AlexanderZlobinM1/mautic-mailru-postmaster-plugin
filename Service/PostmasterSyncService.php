@@ -19,6 +19,7 @@ final class PostmasterSyncService
         private readonly EmailDomainProvider $emailDomainProvider,
         private readonly DomainStatRepository $statRepository,
         private readonly GuardService $guardService,
+        private readonly GuardRuntimePoller $runtimePoller,
     ) {
     }
 
@@ -117,7 +118,6 @@ final class PostmasterSyncService
     public function syncActiveGuardDomains(?\DateTimeImmutable $now = null): SyncResult
     {
         $now ??= new \DateTimeImmutable();
-        $statDate = $now->setTime(0, 0);
         $activeDomains = $this->guardService->getActiveDomains($now);
         $trackedLookup = array_fill_keys($this->statRepository->getTrackedDomains(), true);
         $domains = array_values(array_filter(
@@ -128,23 +128,7 @@ final class PostmasterSyncService
 
         $storedRows = 0;
         foreach ($domains as $domain) {
-            foreach ($this->apiClient->getDetailedStatistics($statDate, $statDate, $domain) as $domainBlock) {
-                $responseDomain = DomainNormalizer::normalize((string) ($domainBlock['domain'] ?? ''));
-                if ($responseDomain !== $domain) {
-                    continue;
-                }
-                foreach (($domainBlock['data'] ?? []) as $row) {
-                    if (!is_array($row) || ($row['date'] ?? null) !== $statDate->format('Y-m-d')) {
-                        continue;
-                    }
-                    $this->statRepository->stage($domain, $statDate, $row, $now);
-                    ++$storedRows;
-                }
-            }
-        }
-
-        if ($storedRows > 0) {
-            $this->statRepository->flush();
+            $storedRows += $this->runtimePoller->pollDomain($domain, 'scheduled_sync')->storedRows;
         }
 
         return new SyncResult(
@@ -152,7 +136,7 @@ final class PostmasterSyncService
             [],
             $domains,
             $storedRows,
-            $this->guardService->evaluateAll($now),
+            $this->guardService->evaluateAll(new \DateTimeImmutable()),
         );
     }
 

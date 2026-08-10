@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace MauticPlugin\MauticMailRuPostmasterBundle\Form\Type;
 
-use Mautic\EmailBundle\Form\Type\EmailListType;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\EmailDomainProvider;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\Form\FormEvent;
+use Symfony\Component\Form\FormEvents;
 use Symfony\Component\Validator\Constraints\NotBlank;
 use Symfony\Component\Validator\Constraints\Range;
 
@@ -16,23 +19,51 @@ use Symfony\Component\Validator\Constraints\Range;
  */
 final class CampaignGuardType extends AbstractType
 {
+    public function __construct(private readonly EmailDomainProvider $domainProvider)
+    {
+    }
+
     /**
      * @param FormBuilderInterface<mixed> $builder
      * @param array<string, mixed>        $options
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('email', EmailListType::class, [
-            'label'      => 'mailru.postmaster.guard.email',
+        $domains = $this->domainProvider->getDomains();
+        $choices = [];
+        foreach ($domains as $domain) {
+            $choices[$domain] = $domain;
+        }
+
+        $builder->add('domain', ChoiceType::class, [
+            'label'      => 'mailru.postmaster.guard.domain',
             'label_attr' => ['class' => 'control-label'],
-            'multiple'   => false,
+            'choices'    => $choices,
+            'placeholder'=> 'mailru.postmaster.guard.domain.placeholder',
             'required'   => true,
             'attr'       => [
                 'class'   => 'form-control',
-                'tooltip' => 'mailru.postmaster.guard.email.help',
+                'tooltip' => 'mailru.postmaster.guard.domain.help',
             ],
             'constraints' => [new NotBlank()],
         ]);
+
+        // Existing nodes created before 0.5.15 stored an email ID. Resolve it
+        // only for the edit form; saving the node persists the explicit domain.
+        $builder->addEventListener(FormEvents::PRE_SET_DATA, function (FormEvent $event): void {
+            $data = $event->getData();
+            if (!is_array($data)
+                || !empty($data['domain'])
+                || empty($data['email'])) {
+                return;
+            }
+
+            $domain = $this->domainProvider->getDomainForEmail((int) $data['email']);
+            if (null !== $domain) {
+                $data['domain'] = $domain;
+                $event->setData($data);
+            }
+        });
 
         $this->addThreshold($builder, 'probably_spam_threshold', 'mailru.postmaster.guard.probably_spam_threshold');
         $this->addThreshold($builder, 'spam_threshold', 'mailru.postmaster.guard.spam_threshold');
