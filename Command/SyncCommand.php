@@ -65,15 +65,31 @@ final class SyncCommand extends Command
             if ($activeGuards) {
                 $result = $this->syncService->syncActiveGuardDomains();
             } else {
-                [$dateFrom, $dateTo] = $this->resolveDates($input);
+                $initialBackfill = (bool) $input->getOption('current-month')
+                    && $this->syncService->requiresInitialBackfill();
+                [$dateFrom, $dateTo] = $initialBackfill
+                    ? $this->fullDates()
+                    : $this->resolveDates($input);
                 $result              = $this->syncService->sync(
                     $dateFrom,
                     $dateTo,
-                    (bool) $input->getOption('full') || (bool) $input->getOption('scheduled-full'),
-                    (bool) $input->getOption('full')
+                    $initialBackfill
+                        || (bool) $input->getOption('full')
+                        || (bool) $input->getOption('scheduled-full'),
+                    $initialBackfill
+                        || (bool) $input->getOption('full')
                         || (bool) $input->getOption('scheduled-full')
                         || (bool) $input->getOption('force-rescan'),
                 );
+                if ($initialBackfill
+                    || (bool) $input->getOption('full')
+                    || (bool) $input->getOption('scheduled-full')
+                    || (bool) $input->getOption('force-rescan')) {
+                    // Written only after the whole backfill returns without an
+                    // exception. A failed first run therefore resumes through
+                    // the missing month markers on the next routine invocation.
+                    $this->syncService->markInitialBackfillCompleted();
+                }
             }
         } catch (\Throwable $exception) {
             $io->error($exception->getMessage());
@@ -163,6 +179,14 @@ final class SyncCommand extends Command
         }
 
         return [$dateFrom->setTime(0, 0), $dateTo->setTime(0, 0)];
+    }
+
+    /** @return array{0: \DateTimeImmutable, 1: \DateTimeImmutable} */
+    private function fullDates(): array
+    {
+        $dateTo = new \DateTimeImmutable('today');
+
+        return [$dateTo->modify('-364 days'), $dateTo];
     }
 
     private function validateModeOptions(InputInterface $input): void

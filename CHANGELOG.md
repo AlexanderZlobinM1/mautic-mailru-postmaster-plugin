@@ -1,13 +1,24 @@
 # Changelog
 
+## 0.5.6
+
+- Move first-run detection entirely into the plugin. MCD only invokes the
+  current-month command; a fresh plugin database escalates that first call to
+  the missing 365-day backfill, while an existing installation adopts its
+  stored domain/month rows.
+- Persist an initial-backfill completion marker only after the whole plugin run
+  succeeds. Interrupted first runs resume from their per-domain/month markers.
+- Treat a successful empty month as checked: the live Mail.ru API was verified
+  to return only a rolling 30-day window even for older documented ranges, so
+  returned daily row count is not a reliable completeness signal.
+
 ## 0.5.5
 
 - Make first-run and scheduled 365-day synchronization a missing-month
   backfill driven by persistent, successful per-domain/month completion
   markers rather than the mere presence of a partial daily row.
-- Persist successful empty month reads so the weekly fallback does not keep
-  querying periods where Mail.ru has no statistics. Progress is committed one
-  month at a time so a later API failure resumes at the first unfinished month.
+- Persist each month attempt independently so a later API failure resumes at
+  the first unfinished month.
 - Keep current-month refresh and current-day active campaign guard polling
   independent from the completed-history markers.
 - Add an explicit emergency `--force-rescan` mode that ignores markers and

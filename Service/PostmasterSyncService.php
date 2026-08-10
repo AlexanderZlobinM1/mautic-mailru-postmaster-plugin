@@ -25,6 +25,24 @@ final class PostmasterSyncService
     ) {
     }
 
+    public function requiresInitialBackfill(): bool
+    {
+        if ($this->syncPeriodRepository->isInitialBackfillCompleted()) {
+            return false;
+        }
+
+        if ($this->syncPeriodRepository->adoptStoredMonths(new \DateTimeImmutable()) > 0) {
+            $this->syncPeriodRepository->flush();
+        }
+
+        return true;
+    }
+
+    public function markInitialBackfillCompleted(): void
+    {
+        $this->syncPeriodRepository->markInitialBackfillCompleted(new \DateTimeImmutable());
+    }
+
     public function sync(
         \DateTimeImmutable $dateFrom,
         \DateTimeImmutable $dateTo,
@@ -92,9 +110,11 @@ final class PostmasterSyncService
                     }
 
                     if ($recordCompletedMonths) {
-                        // A successful empty response is still a completed month. This
-                        // prevents weekly backfill from repeatedly querying periods in
-                        // which Mail.ru has no statistics for this sender domain.
+                        // A successful API response, including an empty one, is
+                        // proof that this exact domain/month was checked. The
+                        // live API currently returns only a rolling recent
+                        // window even for older documented date ranges, so row
+                        // count cannot be used as a completeness signal.
                         $this->syncPeriodRepository->markCompleted($requestedDomain, $monthFrom, $syncedAt);
                     }
                 }
