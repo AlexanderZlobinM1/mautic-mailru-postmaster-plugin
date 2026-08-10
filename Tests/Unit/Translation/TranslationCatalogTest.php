@@ -27,6 +27,18 @@ final class TranslationCatalogTest extends TestCase
         );
     }
 
+    public function testUiKeysUsedOutsidePluginTemplatesAreTranslated(): void
+    {
+        $root = dirname(__DIR__, 3);
+
+        foreach (['en_US', 'ru', 'ru_RU'] as $locale) {
+            $catalog = $this->catalog($root.'/Translations/'.$locale.'/messages.ini');
+
+            self::assertArrayHasKey('mailru.postmaster.action.back', $catalog);
+            self::assertArrayHasKey('mautic.campaign.mailru.postmaster.guard', $catalog);
+        }
+    }
+
     /**
      * @return array<string, string>
      */

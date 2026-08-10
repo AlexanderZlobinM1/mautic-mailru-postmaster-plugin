@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.16
+
+- Add the canonical translated campaign-canvas label for the Mail.ru
+  Postmaster guard instead of exposing its raw translation key.
+- Replace the unavailable Mautic 7 `mautic.core.back` key with a plugin-owned
+  translated Back button label.
+
 ## 0.5.15
 
 - Replace the campaign guard email selector with an explicit sender-domain
