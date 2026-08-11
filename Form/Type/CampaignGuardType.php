@@ -11,6 +11,7 @@ use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
+use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\Validator\Constraints\NotBlank;
 use Symfony\Component\Validator\Constraints\Range;
 
@@ -29,6 +30,7 @@ final class CampaignGuardType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
+        $conditionMode = 'condition' === $options['mode'];
         $domains = $this->domainProvider->getDomains();
         $choices = [];
         foreach ($domains as $domain) {
@@ -65,8 +67,20 @@ final class CampaignGuardType extends AbstractType
             }
         });
 
-        $this->addThreshold($builder, 'probably_spam_threshold', 'mailru.postmaster.guard.probably_spam_threshold');
-        $this->addThreshold($builder, 'spam_threshold', 'mailru.postmaster.guard.spam_threshold');
+        $this->addThreshold(
+            $builder,
+            'probably_spam_threshold',
+            $conditionMode
+                ? 'mailru.postmaster.condition.probably_spam_threshold'
+                : 'mailru.postmaster.guard.probably_spam_threshold',
+        );
+        $this->addThreshold(
+            $builder,
+            'spam_threshold',
+            $conditionMode
+                ? 'mailru.postmaster.condition.spam_threshold'
+                : 'mailru.postmaster.guard.spam_threshold',
+        );
     }
 
     /**
@@ -97,5 +111,11 @@ final class CampaignGuardType extends AbstractType
     public function getBlockPrefix(): string
     {
         return 'mailru_postmaster_campaign_guard';
+    }
+
+    public function configureOptions(OptionsResolver $resolver): void
+    {
+        $resolver->setDefaults(['mode' => 'guard']);
+        $resolver->setAllowedValues('mode', ['guard', 'condition']);
     }
 }

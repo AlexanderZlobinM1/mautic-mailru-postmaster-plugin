@@ -7,6 +7,7 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\EventListener;
 use Mautic\CampaignBundle\CampaignEvents;
 use Mautic\CampaignBundle\Entity\Event;
 use Mautic\CampaignBundle\Event\CampaignBuilderEvent;
+use Mautic\CampaignBundle\Event\CampaignExecutionEvent;
 use Mautic\CampaignBundle\Event\CampaignTriggerEvent;
 use Mautic\CampaignBundle\Event\PendingEvent;
 use MauticPlugin\MauticMailRuPostmasterBundle\Form\Type\CampaignGuardType;
@@ -16,8 +17,10 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 final class CampaignSubscriber implements EventSubscriberInterface
 {
-    public const EVENT_TYPE    = 'mailru.postmaster.guard';
-    public const EXECUTE_EVENT = 'mailru.postmaster.guard.execute';
+    public const EVENT_TYPE              = 'mailru.postmaster.guard';
+    public const EXECUTE_EVENT           = 'mailru.postmaster.guard.execute';
+    public const CONDITION_TYPE          = 'mailru.postmaster.condition';
+    public const CONDITION_EXECUTE_EVENT = 'mailru.postmaster.condition.execute';
 
     public function __construct(
         private readonly GuardService $guardService,
@@ -31,6 +34,7 @@ final class CampaignSubscriber implements EventSubscriberInterface
             CampaignEvents::CAMPAIGN_ON_BUILD   => ['onCampaignBuild', 0],
             CampaignEvents::CAMPAIGN_ON_TRIGGER => ['onCampaignTrigger', 0],
             self::EXECUTE_EVENT                 => ['onExecute', 0],
+            self::CONDITION_EXECUTE_EVENT       => ['onConditionExecute', 0],
         ];
     }
 
@@ -49,6 +53,15 @@ final class CampaignSubscriber implements EventSubscriberInterface
                 ],
             ],
         ]);
+
+        $event->addCondition(self::CONDITION_TYPE, [
+            'label'           => 'mailru.postmaster.condition.label',
+            'description'     => 'mailru.postmaster.condition.description',
+            'formType'        => CampaignGuardType::class,
+            'formTypeOptions' => ['mode' => 'condition'],
+            'eventName'       => self::CONDITION_EXECUTE_EVENT,
+            'hideTriggerMode' => true,
+        ]);
     }
 
     public function onExecute(PendingEvent $pendingEvent): void
@@ -63,6 +76,17 @@ final class CampaignSubscriber implements EventSubscriberInterface
         }
 
         $pendingEvent->passAll();
+    }
+
+    public function onConditionExecute(CampaignExecutionEvent $event): void
+    {
+        if (!$event->checkContext(self::CONDITION_TYPE)) {
+            return;
+        }
+
+        // Conditions route contacts from the already stored current-day
+        // snapshot. API polling remains detached from campaign throughput.
+        $event->setResult($this->guardService->isThresholdSafe($event->getConfig()));
     }
 
     public function onCampaignTrigger(CampaignTriggerEvent $event): void

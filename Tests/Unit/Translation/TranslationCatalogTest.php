@@ -36,6 +36,7 @@ final class TranslationCatalogTest extends TestCase
 
             self::assertArrayHasKey('mailru.postmaster.action.back', $catalog);
             self::assertArrayHasKey('mautic.campaign.mailru.postmaster.guard', $catalog);
+            self::assertArrayHasKey('mautic.campaign.mailru.postmaster.condition', $catalog);
         }
     }
 

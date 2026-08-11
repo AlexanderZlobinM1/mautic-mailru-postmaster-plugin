@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0
+
+- Rename the campaign action to the human-readable Mail.ru campaign stopper
+  and render every canvas label in white for consistent contrast.
+- Add an immediate Mail.ru threshold condition with safe and exceeded routes.
+  It uses the same strict thresholds as the stopper but never unpublishes the
+  campaign. Its canvas node uses Mautic's standard condition template and
+  standard interaction area.
+- Include condition domains in the detached current-day watcher so condition
+  checks receive fresh Mail.ru data without blocking campaign throughput.
+
 ## 0.5.16
 
 - Add the canonical translated campaign-canvas label for the Mail.ru

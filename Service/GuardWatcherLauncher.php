@@ -18,7 +18,7 @@ final class GuardWatcherLauncher
 
     public function launch(int $campaignId): void
     {
-        if ($campaignId <= 0 || !$this->guardService->hasActiveGuardForCampaign($campaignId)) {
+        if ($campaignId <= 0 || !$this->guardService->hasActiveMonitorForCampaign($campaignId)) {
             return;
         }
 

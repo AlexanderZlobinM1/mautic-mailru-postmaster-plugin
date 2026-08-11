@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MauticPlugin\MauticMailRuPostmasterBundle\Command;
 
+use MauticPlugin\MauticMailRuPostmasterBundle\EventListener\CampaignSubscriber;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\CampaignWatchRegistry;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
@@ -58,17 +59,17 @@ final class GuardWatchCommand extends Command
         $lastGenerations = [];
         try {
             do {
-                $guards = $this->guardService->getActiveGuardsForCampaign($campaignId);
-                if ([] === $guards) {
+                $monitors = $this->guardService->getActiveMonitorsForCampaign($campaignId);
+                if ([] === $monitors) {
                     break;
                 }
 
                 $freshDomains = [];
-                $guardDomains = [];
-                foreach ($guards as $guard) {
-                    $poll = $this->runtimePoller->pollGuard($guard, 'campaign_watcher');
-                    $guardId = (int) $guard->getId();
-                    $guardDomains[$guardId] = $poll->domain;
+                $monitorDomains = [];
+                foreach ($monitors as $monitor) {
+                    $poll = $this->runtimePoller->pollGuard($monitor, 'campaign_watcher');
+                    $monitorId = (int) $monitor->getId();
+                    $monitorDomains[$monitorId] = $poll->domain;
                     if (null === $poll->domain
                         || '' === $poll->generation
                         || ($lastGenerations[$poll->domain] ?? null) === $poll->generation) {
@@ -81,12 +82,15 @@ final class GuardWatchCommand extends Command
                     }
                 }
 
-                foreach ($guards as $guard) {
-                    $domain = $guardDomains[(int) $guard->getId()] ?? null;
+                foreach ($monitors as $monitor) {
+                    if (CampaignSubscriber::EVENT_TYPE !== $monitor->getType()) {
+                        continue;
+                    }
+                    $domain = $monitorDomains[(int) $monitor->getId()] ?? null;
                     if (null === $domain || !isset($freshDomains[$domain])) {
                         continue;
                     }
-                    if ($this->guardService->evaluate($guard, source: 'campaign_watcher')->stopped) {
+                    if ($this->guardService->evaluate($monitor, source: 'campaign_watcher')->stopped) {
                         break 2;
                     }
                 }

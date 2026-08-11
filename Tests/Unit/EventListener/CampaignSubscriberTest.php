@@ -31,11 +31,35 @@ final class CampaignSubscriberTest extends TestCase
         );
     }
 
+    public function testThresholdRouterIsRegisteredAsImmediateCondition(): void
+    {
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->method('trans')->willReturnArgument(0);
+        $builder = new CampaignBuilderEvent($translator);
+        $subscriber = (new \ReflectionClass(CampaignSubscriber::class))->newInstanceWithoutConstructor();
+
+        $subscriber->onCampaignBuild($builder);
+
+        $conditions = $builder->getConditions();
+        self::assertArrayHasKey(CampaignSubscriber::CONDITION_TYPE, $conditions);
+        self::assertSame(
+            CampaignSubscriber::CONDITION_EXECUTE_EVENT,
+            $conditions[CampaignSubscriber::CONDITION_TYPE]['eventName'],
+        );
+        self::assertSame(
+            ['mode' => 'condition'],
+            $conditions[CampaignSubscriber::CONDITION_TYPE]['formTypeOptions'],
+        );
+        self::assertArrayNotHasKey('template', $conditions[CampaignSubscriber::CONDITION_TYPE]);
+        self::assertTrue($conditions[CampaignSubscriber::CONDITION_TYPE]['hideTriggerMode']);
+    }
+
     public function testRuntimeWatcherHooksNormalCampaignTriggerWithoutEmailInterception(): void
     {
         $events = CampaignSubscriber::getSubscribedEvents();
 
         self::assertSame(['onCampaignTrigger', 0], $events[CampaignEvents::CAMPAIGN_ON_TRIGGER]);
-        self::assertCount(3, $events);
+        self::assertSame(['onConditionExecute', 0], $events[CampaignSubscriber::CONDITION_EXECUTE_EVENT]);
+        self::assertCount(4, $events);
     }
 }

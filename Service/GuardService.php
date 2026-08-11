@@ -10,6 +10,7 @@ use Mautic\CampaignBundle\Entity\EventRepository;
 use Mautic\CampaignBundle\Model\CampaignModel;
 use Mautic\CampaignBundle\Model\Exceptions\CampaignAlreadyUnpublishedException;
 use Mautic\CampaignBundle\Model\Exceptions\CampaignVersionMismatchedException;
+use MauticPlugin\MauticMailRuPostmasterBundle\Api\DomainNormalizer;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStat;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStop;
@@ -24,6 +25,7 @@ final class GuardService
         private readonly EventRepository $eventRepository,
         private readonly EntityManagerInterface $entityManager,
         private readonly GuardDomainResolver $domainResolver,
+        private readonly ThresholdEvaluator $thresholdEvaluator,
         private readonly DomainStatRepository $statRepository,
         private readonly GuardStopRepository $stopRepository,
         private readonly CampaignModel $campaignModel,
@@ -38,7 +40,7 @@ final class GuardService
         $now ??= new \DateTimeImmutable();
 
         foreach ($this->eventRepository->findBy(['type' => CampaignSubscriber::EVENT_TYPE]) as $event) {
-            if (!$this->isActiveGuard($event, $now)) {
+            if (!$this->isActiveMonitor($event, $now)) {
                 continue;
             }
 
@@ -57,13 +59,15 @@ final class GuardService
     {
         $now ??= new \DateTimeImmutable();
         $domains = [];
-        foreach ($this->eventRepository->findBy(['type' => CampaignSubscriber::EVENT_TYPE]) as $event) {
-            if (!$this->isActiveGuard($event, $now)) {
-                continue;
-            }
-            $domain = $this->domainResolver->resolve($event);
-            if (null !== $domain) {
-                $domains[$domain] = true;
+        foreach ([CampaignSubscriber::EVENT_TYPE, CampaignSubscriber::CONDITION_TYPE] as $type) {
+            foreach ($this->eventRepository->findBy(['type' => $type]) as $event) {
+                if (!$this->isActiveMonitor($event, $now)) {
+                    continue;
+                }
+                $domain = $this->domainResolver->resolve($event);
+                if (null !== $domain) {
+                    $domains[$domain] = true;
+                }
             }
         }
 
@@ -78,13 +82,27 @@ final class GuardService
      */
     public function getActiveGuardsForCampaign(int $campaignId, ?\DateTimeImmutable $now = null): array
     {
+        return array_values(array_filter(
+            $this->getActiveMonitorsForCampaign($campaignId, $now),
+            static fn (Event $event): bool => CampaignSubscriber::EVENT_TYPE === $event->getType(),
+        ));
+    }
+
+    /**
+     * @return list<Event>
+     */
+    public function getActiveMonitorsForCampaign(int $campaignId, ?\DateTimeImmutable $now = null): array
+    {
         $now ??= new \DateTimeImmutable();
-        $guards = [];
-        foreach ($this->eventRepository->findBy([
-            'campaign' => $campaignId,
-            'type'     => CampaignSubscriber::EVENT_TYPE,
-        ]) as $event) {
+        $monitors = [];
+        foreach ($this->eventRepository->findBy(['campaign' => $campaignId]) as $event) {
             if (!$event instanceof Event) {
+                continue;
+            }
+            if (!in_array($event->getType(), [
+                CampaignSubscriber::EVENT_TYPE,
+                CampaignSubscriber::CONDITION_TYPE,
+            ], true)) {
                 continue;
             }
 
@@ -93,17 +111,46 @@ final class GuardService
             $this->entityManager->refresh($event);
             $campaign = $event->getCampaign();
             $this->entityManager->refresh($campaign);
-            if ($this->isActiveGuard($event, $now)) {
-                $guards[] = $event;
+            if ($this->isActiveMonitor($event, $now)) {
+                $monitors[] = $event;
             }
         }
 
-        return $guards;
+        return $monitors;
     }
 
     public function hasActiveGuardForCampaign(int $campaignId): bool
     {
         return [] !== $this->getActiveGuardsForCampaign($campaignId);
+    }
+
+    public function hasActiveMonitorForCampaign(int $campaignId): bool
+    {
+        return [] !== $this->getActiveMonitorsForCampaign($campaignId);
+    }
+
+    /**
+     * The condition is intentionally fail-open, matching the campaign stopper:
+     * missing, old or stale Mail.ru data keeps the normal route open.
+     *
+     * @param array<string, mixed> $properties
+     */
+    public function isThresholdSafe(array $properties, ?\DateTimeImmutable $now = null): bool
+    {
+        $now ??= new \DateTimeImmutable();
+        $domain = DomainNormalizer::normalize((string) ($properties['domain'] ?? ''));
+        if (null === $domain) {
+            return true;
+        }
+
+        $stat = $this->statRepository->getLatestForDomain($domain);
+        if (!$stat instanceof DomainStat
+            || $stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')
+            || $stat->getSyncedAt() < $now->modify('-20 minutes')) {
+            return true;
+        }
+
+        return null === $this->thresholdEvaluator->findBreach($stat, $properties);
     }
 
     public function evaluate(
@@ -142,7 +189,7 @@ final class GuardService
             return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_stale', $reason);
         }
 
-        $breach = $this->findBreach($stat, $properties);
+        $breach = $this->thresholdEvaluator->findBreach($stat, $properties);
         if (null === $breach) {
             return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_below_threshold');
         }
@@ -252,36 +299,7 @@ final class GuardService
         return $stopped ? GuardResult::stopped($reason) : GuardResult::pass($reason);
     }
 
-    /**
-     * @param array<string, mixed> $properties
-     *
-     * @return array{metric: string, actual: float, threshold: float}|null
-     */
-    private function findBreach(DomainStat $stat, array $properties): ?array
-    {
-        $checks = [
-            [
-                'metric'    => 'spam_percent',
-                'actual'    => $stat->getSpamPercent(),
-                'threshold' => (float) ($properties['spam_threshold'] ?? 100),
-            ],
-            [
-                'metric'    => 'probably_spam_percent',
-                'actual'    => $stat->getProbablySpamPercent(),
-                'threshold' => (float) ($properties['probably_spam_threshold'] ?? 100),
-            ],
-        ];
-
-        foreach ($checks as $check) {
-            if ($check['actual'] > $check['threshold']) {
-                return $check;
-            }
-        }
-
-        return null;
-    }
-
-    private function isActiveGuard(Event $event, \DateTimeImmutable $now): bool
+    private function isActiveMonitor(Event $event, \DateTimeImmutable $now): bool
     {
         if (null !== $event->getDeleted()) {
             return false;
