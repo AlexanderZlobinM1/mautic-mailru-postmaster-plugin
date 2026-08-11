@@ -7,7 +7,8 @@
 - Add an immediate Mail.ru threshold condition with safe and exceeded routes.
   It uses the same strict thresholds as the stopper but never unpublishes the
   campaign. Its canvas node uses Mautic's standard condition template and
-  standard interaction area.
+  standard interaction area, with both configured threshold values visible on
+  the campaign canvas.
 - Include condition domains in the detached current-day watcher so condition
   checks receive fresh Mail.ru data without blocking campaign throughput.
 

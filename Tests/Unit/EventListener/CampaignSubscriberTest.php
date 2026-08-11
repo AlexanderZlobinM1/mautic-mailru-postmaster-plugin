@@ -50,7 +50,10 @@ final class CampaignSubscriberTest extends TestCase
             ['mode' => 'condition'],
             $conditions[CampaignSubscriber::CONDITION_TYPE]['formTypeOptions'],
         );
-        self::assertArrayNotHasKey('template', $conditions[CampaignSubscriber::CONDITION_TYPE]);
+        self::assertSame(
+            '@MauticMailRuPostmaster/Campaign/condition.html.twig',
+            $conditions[CampaignSubscriber::CONDITION_TYPE]['template'],
+        );
         self::assertTrue($conditions[CampaignSubscriber::CONDITION_TYPE]['hideTriggerMode']);
     }
 

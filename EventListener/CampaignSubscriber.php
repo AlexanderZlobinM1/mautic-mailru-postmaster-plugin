@@ -60,6 +60,7 @@ final class CampaignSubscriber implements EventSubscriberInterface
             'formType'        => CampaignGuardType::class,
             'formTypeOptions' => ['mode' => 'condition'],
             'eventName'       => self::CONDITION_EXECUTE_EVENT,
+            'template'        => '@MauticMailRuPostmaster/Campaign/condition.html.twig',
             'hideTriggerMode' => true,
         ]);
     }
