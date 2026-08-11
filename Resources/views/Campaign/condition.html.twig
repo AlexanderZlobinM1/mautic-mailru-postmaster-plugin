@@ -9,17 +9,23 @@
 {% endif %}
     <div class="campaign-event-type">
       <div class="campaign-event-content fw-nowrap gap-xs ai-center fd-row d-flex fg-1 pa-md">
-        <span class="h5 fw-b event-type-color">{{ 'mautic.campaign.if'|trans }}</span>
-        <span>{{ ('mautic.campaign.'~event['type'])|trans }}</span>
-        <span class="campaign-event-name label label-warning ml-5 ellipsis">
-          {% if ('dev' == constant('MAUTIC_ENV')) %}<small>{{ event['id'] }}</small> {% endif %}{{ event['name'] }}
-        </span>
-        <span class="label label-warning ml-5 mr-lg">
-          {{ 'mailru.postmaster.guard.node_thresholds'|trans({
-            '%probably%': event['properties']['probably_spam_threshold']|default('—'),
-            '%spam%': event['properties']['spam_threshold']|default('—')
-          }) }}
-        </span>
+        <div class="d-flex fd-column gap-xs fg-1 mr-lg">
+          <div class="d-flex fw-nowrap gap-xs ai-center">
+            <span class="h5 fw-b event-type-color">{{ 'mautic.campaign.if'|trans }}</span>
+            <span>{{ ('mautic.campaign.'~event['type'])|trans }}</span>
+            <span class="campaign-event-name label label-warning ml-5 ellipsis">
+              {% if ('dev' == constant('MAUTIC_ENV')) %}<small>{{ event['id'] }}</small> {% endif %}{{ event['name'] }}
+            </span>
+          </div>
+          <div>
+            <span class="label label-warning">
+              {{ 'mailru.postmaster.guard.node_thresholds'|trans({
+                '%probably%': event['properties']['probably_spam_threshold']|default('—'),
+                '%spam%': event['properties']['spam_threshold']|default('—')
+              }) }}
+            </span>
+          </div>
+        </div>
         <i class="{{ getCampaignEventIcon(event['type']) }} ri-lg ml-a campaign-event-icon event-type-color"></i>
       </div>
     </div>
