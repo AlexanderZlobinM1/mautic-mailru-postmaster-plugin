@@ -6,9 +6,10 @@
         <div class="campaign-event-content d-flex fw-nowrap ai-center gap-sm">
             <div class="campaign-event-icon pa-sm mr-5"><i class="ri-shield-check-line"></i></div>
             <div class="d-flex fd-column ai-start">
-                <span class="fs-18 fw-l text-danger">{{ 'mailru.postmaster.guard.short'|trans }}</span>
-                <span class="campaign-event-name ellipsis">{{ event['name'] }}</span>
-                <small class="text-danger">
+                <span class="fs-18 fw-l text-white">{{ 'mailru.postmaster.guard.short'|trans }}</span>
+                <span class="campaign-event-name ellipsis text-white">{{ event['name'] }}</span>
+                <small class="text-white">{{ event['properties']['domain']|default('—') }}</small>
+                <small class="text-white">
                     {{ 'mailru.postmaster.guard.node_thresholds'|trans({
                         '%probably%': event['properties']['probably_spam_threshold']|default('—'),
                         '%spam%': event['properties']['spam_threshold']|default('—')

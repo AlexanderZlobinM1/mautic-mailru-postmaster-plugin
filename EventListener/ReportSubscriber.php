@@ -75,7 +75,12 @@ final class ReportSubscriber implements EventSubscriberInterface
         if ($event->checkContext(self::CONTEXT_STATS)) {
             $queryBuilder = $event->getQueryBuilder();
             $queryBuilder->from(MAUTIC_TABLE_PREFIX.'mailru_postmaster_stats', 'ps')
-                ->andWhere('ps.is_tracked = 1');
+                ->andWhere('ps.is_tracked = 1')
+                ->andWhere('ps.stat_date >= :mailru_postmaster_cutoff')
+                ->setParameter(
+                    'mailru_postmaster_cutoff',
+                    (new \DateTimeImmutable('today'))->modify('-29 days')->format('Y-m-d'),
+                );
             $event->applyDateFilters($queryBuilder, 'stat_date', 'ps');
             $event->setQueryBuilder($queryBuilder);
 
