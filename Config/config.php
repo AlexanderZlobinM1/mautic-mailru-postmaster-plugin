@@ -8,7 +8,7 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Integration\MailRuPostmasterIntegr
 return [
     'name'        => 'Mail.ru Postmaster',
     'description' => 'mailru.postmaster.description',
-    'version'     => '0.6.0',
+    'version'     => '0.6.1',
     'author'      => 'Sales Snap',
     'routes'      => [
         'main' => [

@@ -13,6 +13,7 @@ final class PostmasterSyncService
     private const MAX_DETAILED_PERIOD_DAYS = 30;
     private const API_REQUEST_SPACING_SECONDS = 7;
     private const ROLLING_WINDOW_DAYS = 30;
+    private const RETENTION_DAYS = 30;
 
     public function __construct(
         private readonly PostmasterApiClient $apiClient,
@@ -88,8 +89,7 @@ final class PostmasterSyncService
             $this->statRepository->flush();
         }
 
-        $retentionCutoff = $today->modify('-29 days');
-        $this->statRepository->pruneBefore($retentionCutoff);
+        $this->pruneExpiredStatistics($today);
 
         return new SyncResult(
             $mauticDomains,
@@ -118,6 +118,7 @@ final class PostmasterSyncService
     public function syncActiveGuardDomains(?\DateTimeImmutable $now = null): SyncResult
     {
         $now ??= new \DateTimeImmutable();
+        $this->pruneExpiredStatistics($now);
         $activeDomains = $this->guardService->getActiveDomains($now);
         $trackedLookup = array_fill_keys($this->statRepository->getTrackedDomains(), true);
         $domains = array_values(array_filter(
@@ -138,6 +139,12 @@ final class PostmasterSyncService
             $storedRows,
             $this->guardService->evaluateAll(new \DateTimeImmutable()),
         );
+    }
+
+    private function pruneExpiredStatistics(\DateTimeImmutable $now): void
+    {
+        $cutoff = $now->setTime(0, 0)->modify(sprintf('-%d days', self::RETENTION_DAYS - 1));
+        $this->statRepository->pruneBefore($cutoff);
     }
 
     /**

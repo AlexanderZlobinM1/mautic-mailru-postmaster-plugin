@@ -47,11 +47,6 @@ final class SyncCommand extends Command
 
         try {
             $this->validateModeOptions($input);
-            if ((bool) $input->getOption('scheduled-full')) {
-                $io->writeln('Deep scheduled synchronization is disabled; the rolling window is handled by --current-month.');
-
-                return Command::SUCCESS;
-            }
             if (!$activeGuards) {
                 $lockHandle = $this->acquireBulkSyncLock();
                 if (null === $lockHandle) {

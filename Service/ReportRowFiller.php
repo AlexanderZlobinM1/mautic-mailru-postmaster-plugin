@@ -6,6 +6,8 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Service;
 
 final class ReportRowFiller
 {
+    private const SPAM_BLOCK_THRESHOLD_PERCENT = 3.0;
+
     /**
      * @param list<string>               $domains
      * @param list<array<string, mixed>> $rows
@@ -19,6 +21,7 @@ final class ReportRowFiller
             $domain = $row['domain'] ?? null;
             if (is_string($domain)) {
                 $row['has_statistics'] = true;
+                $row['delivery_status'] = $this->deliveryStatus($row);
                 $rowsByDomain[$domain] = $row;
             }
         }
@@ -44,6 +47,7 @@ final class ReportRowFiller
         if ([] !== $rows) {
             foreach ($rows as &$row) {
                 $row['has_statistics'] = true;
+                $row['delivery_status'] = $this->deliveryStatus($row);
             }
             unset($row);
 
@@ -70,6 +74,20 @@ final class ReportRowFiller
             'spam_percent'          => 0.0,
             'probably_spam_percent' => 0.0,
             'has_statistics'        => false,
+            'delivery_status'       => 'no_data',
         ];
+    }
+
+    /**
+     * The drain safety rule uses only Mail.ru's exact spam metric.
+     * The probably-spam metric must not stop delivery.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function deliveryStatus(array $row): string
+    {
+        return (float) ($row['spam_percent'] ?? 0) >= self::SPAM_BLOCK_THRESHOLD_PERCENT
+            ? 'blocked'
+            : 'allowed';
     }
 }

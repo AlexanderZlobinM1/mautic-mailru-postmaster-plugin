@@ -9,6 +9,7 @@
             <th class="text-right">{{ 'mailru.postmaster.report.complaints'|trans }}</th>
             <th class="text-right">{{ 'mailru.postmaster.report.reputation'|trans }}</th>
             {% if showTrend %}<th class="text-right">{{ 'mailru.postmaster.report.trend'|trans }}</th>{% endif %}
+            <th>{{ 'mailru.postmaster.report.status'|trans }}</th>
             <th>{{ 'mailru.postmaster.report.deliverability'|trans }}</th>
         </tr>
         </thead>
@@ -37,6 +38,15 @@
                         {% if row.trend > 0 %}<i class="ri-arrow-up-line text-danger"></i>{% elseif row.trend < 0 %}<i class="ri-arrow-down-line text-success"></i>{% endif %}
                     </td>
                 {% endif %}
+                <td>
+                    {% if row.delivery_status == 'blocked' %}
+                        <span class="label label-danger" title="{{ 'mailru.postmaster.report.status.blocked_help'|trans }}">{{ 'mailru.postmaster.report.status.blocked'|trans }}</span>
+                    {% elseif row.delivery_status == 'allowed' %}
+                        <span class="label label-success" title="{{ 'mailru.postmaster.report.status.allowed_help'|trans }}">{{ 'mailru.postmaster.report.status.allowed'|trans }}</span>
+                    {% else %}
+                        <span class="label label-default">{{ 'mailru.postmaster.report.status.no_data'|trans }}</span>
+                    {% endif %}
+                </td>
                 <td style="min-width: 260px">
                     <div class="d-flex" style="height: 28px; overflow: hidden; border-radius: 2px">
                         {% if not hasStatistics %}

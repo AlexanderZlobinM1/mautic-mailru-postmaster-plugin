@@ -45,6 +45,22 @@ final class SyncCommandTest extends TestCase
         self::assertSame(29, (int) $from->diff($to)->format('%a'));
     }
 
+    public function testScheduledFullAliasUsesRollingWindow(): void
+    {
+        $input = $this->input([
+            'full' => false,
+            'scheduled-full' => true,
+            'force-rescan' => false,
+            'current-month' => false,
+        ]);
+        $command = (new \ReflectionClass(SyncCommand::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(SyncCommand::class, 'resolveDates');
+
+        [$from, $to] = $method->invoke($command, $input);
+
+        self::assertSame(29, (int) $from->diff($to)->format('%a'));
+    }
+
     public function testExplicitOldRangeIsRejected(): void
     {
         $input = $this->input([

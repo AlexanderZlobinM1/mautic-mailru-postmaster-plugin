@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1
+
+- Make the legacy `--scheduled-full` console mode perform the same rolling
+  30-day synchronization as the current-month mode instead of returning
+  without polling Mail.ru.
+- Add an explicit current delivery status to the domain report: `blocked` at
+  `spam_percent >= 3%`, `allowed` below that threshold, and `no data` when no
+  statistics exist. The status intentionally ignores `probably_spam_percent`.
+- Apply the 30-day retention cleanup on every synchronization mode, including
+  active-guard polls, so expired rows cannot accumulate when only guard polling
+  is running.
+
 ## 0.6.0
 
 - Rename the campaign action to the human-readable Mail.ru campaign stopper
