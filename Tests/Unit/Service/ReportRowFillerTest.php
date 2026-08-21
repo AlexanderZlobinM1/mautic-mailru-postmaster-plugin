@@ -32,10 +32,10 @@ final class ReportRowFillerTest extends TestCase
         self::assertSame(0.0, $rows[1]['spam_percent']);
         self::assertSame(0.0, $rows[1]['probably_spam_percent']);
         self::assertFalse($rows[1]['has_statistics']);
-        self::assertSame('no_data', $rows[1]['delivery_status']);
+        self::assertArrayNotHasKey('delivery_status', $rows[1]);
     }
 
-    public function testStatusUsesExactSpamThresholdAndIgnoresProbablySpam(): void
+    public function testReportRowsExposeMetricsWithoutASeparateSendingStatus(): void
     {
         $rows = (new ReportRowFiller())->fillLatestRows(
             ['allowed.example', 'blocked.example'],
@@ -53,8 +53,8 @@ final class ReportRowFillerTest extends TestCase
             ],
         );
 
-        self::assertSame('allowed', $rows[0]['delivery_status']);
-        self::assertSame('blocked', $rows[1]['delivery_status']);
+        self::assertArrayNotHasKey('delivery_status', $rows[0]);
+        self::assertArrayNotHasKey('delivery_status', $rows[1]);
     }
 
     public function testDomainWithoutStatisticsGetsOneZeroRowForToday(): void

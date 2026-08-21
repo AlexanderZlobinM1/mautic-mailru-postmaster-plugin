@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2
+
+- Remove the derived Sending status column from Postmaster reports. The report
+  now presents Mail.ru's delivery, probably-spam, and exact-spam percentages
+  directly without a duplicate policy label.
+- Keep every regular console synchronization mode, including the legacy
+  `--scheduled-full` compatibility mode, as a rolling 30-day state refresh.
+
 ## 0.6.1
 
 - Make the legacy `--scheduled-full` console mode perform the same rolling
