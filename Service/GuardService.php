@@ -16,6 +16,7 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStop;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStopRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\EventListener\CampaignSubscriber;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use Psr\Log\LoggerInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -31,11 +32,16 @@ final class GuardService
         private readonly CampaignModel $campaignModel,
         private readonly LoggerInterface $logger,
         private readonly TranslatorInterface $translator,
+        private readonly PostmasterConfiguration $configuration,
     ) {
     }
 
     public function evaluateAll(?\DateTimeImmutable $now = null): int
     {
+        if (!$this->configuration->isEnabled()) {
+            return 0;
+        }
+
         $stopped = 0;
         $now ??= new \DateTimeImmutable();
 
@@ -57,6 +63,10 @@ final class GuardService
      */
     public function getActiveDomains(?\DateTimeImmutable $now = null): array
     {
+        if (!$this->configuration->isEnabled()) {
+            return [];
+        }
+
         $now ??= new \DateTimeImmutable();
         $domains = [];
         foreach ([CampaignSubscriber::EVENT_TYPE, CampaignSubscriber::CONDITION_TYPE] as $type) {
@@ -93,6 +103,10 @@ final class GuardService
      */
     public function getActiveMonitorsForCampaign(int $campaignId, ?\DateTimeImmutable $now = null): array
     {
+        if (!$this->configuration->isEnabled()) {
+            return [];
+        }
+
         $now ??= new \DateTimeImmutable();
         $monitors = [];
         foreach ($this->eventRepository->findBy(['campaign' => $campaignId]) as $event) {
@@ -137,6 +151,10 @@ final class GuardService
      */
     public function isThresholdSafe(array $properties, ?\DateTimeImmutable $now = null): bool
     {
+        if (!$this->configuration->isEnabled()) {
+            return true;
+        }
+
         $now ??= new \DateTimeImmutable();
         $domain = DomainNormalizer::normalize((string) ($properties['domain'] ?? ''));
         if (null === $domain) {
@@ -159,6 +177,10 @@ final class GuardService
         string $source = 'manual',
     ): GuardResult
     {
+        if (!$this->configuration->isEnabled()) {
+            return GuardResult::pass();
+        }
+
         $now ??= new \DateTimeImmutable();
         $properties = $event->getProperties();
         $emailId    = $this->domainResolver->getLegacyEmailId($event);

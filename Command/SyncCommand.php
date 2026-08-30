@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MauticPlugin\MauticMailRuPostmasterBundle\Command;
 
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\PostmasterSyncService;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -20,6 +21,7 @@ final class SyncCommand extends Command
 {
     public function __construct(
         private readonly PostmasterSyncService $syncService,
+        private readonly PostmasterConfiguration $configuration,
     ) {
         parent::__construct();
     }
@@ -44,6 +46,10 @@ final class SyncCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $activeGuards = (bool) $input->getOption('active-guards');
         $lockHandle = null;
+
+        if (!$this->configuration->isEnabled()) {
+            return Command::SUCCESS;
+        }
 
         try {
             $this->validateModeOptions($input);

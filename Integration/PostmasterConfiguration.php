@@ -7,7 +7,7 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Integration;
 use Mautic\PluginBundle\Helper\IntegrationHelper;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\TokenPayload;
 
-final class PostmasterConfiguration
+class PostmasterConfiguration
 {
     public function __construct(private readonly IntegrationHelper $integrationHelper)
     {
@@ -15,7 +15,11 @@ final class PostmasterConfiguration
 
     public function isEnabled(): bool
     {
-        return $this->getIntegration()->isEnabled();
+        try {
+            return $this->getIntegration()->isEnabled();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function getTokenPayload(): TokenPayload

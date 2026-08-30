@@ -7,12 +7,17 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\EventListener;
 use Mautic\ReportBundle\Event\ReportBuilderEvent;
 use Mautic\ReportBundle\Event\ReportGeneratorEvent;
 use Mautic\ReportBundle\ReportEvents;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 final class ReportSubscriber implements EventSubscriberInterface
 {
     public const CONTEXT_STATS = 'mailru_postmaster_stats';
     public const CONTEXT_STOPS = 'mailru_postmaster_guard_stops';
+
+    public function __construct(private readonly PostmasterConfiguration $configuration)
+    {
+    }
 
     public static function getSubscribedEvents(): array
     {
@@ -24,6 +29,10 @@ final class ReportSubscriber implements EventSubscriberInterface
 
     public function onReportBuilder(ReportBuilderEvent $event): void
     {
+        if (!$this->configuration->isEnabled()) {
+            return;
+        }
+
         if ($event->checkContext(self::CONTEXT_STATS)) {
             $columns = [
                 'ps.domain'                => self::column('mailru.postmaster.report.domain', 'string'),
@@ -72,6 +81,10 @@ final class ReportSubscriber implements EventSubscriberInterface
 
     public function onReportGenerate(ReportGeneratorEvent $event): void
     {
+        if (!$this->configuration->isEnabled()) {
+            return;
+        }
+
         if ($event->checkContext(self::CONTEXT_STATS)) {
             $queryBuilder = $event->getQueryBuilder();
             $queryBuilder->from(MAUTIC_TABLE_PREFIX.'mailru_postmaster_stats', 'ps')

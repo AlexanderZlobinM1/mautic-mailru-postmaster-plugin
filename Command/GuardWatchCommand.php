@@ -8,6 +8,7 @@ use MauticPlugin\MauticMailRuPostmasterBundle\EventListener\CampaignSubscriber;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\CampaignWatchRegistry;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -25,6 +26,7 @@ final class GuardWatchCommand extends Command
         private readonly GuardService $guardService,
         private readonly GuardRuntimePoller $runtimePoller,
         private readonly CampaignWatchRegistry $registry,
+        private readonly PostmasterConfiguration $configuration,
     ) {
         parent::__construct();
     }
@@ -41,6 +43,10 @@ final class GuardWatchCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        if (!$this->configuration->isEnabled()) {
+            return Command::SUCCESS;
+        }
+
         $campaignId = filter_var(
             $input->getOption('campaign-id'),
             FILTER_VALIDATE_INT,

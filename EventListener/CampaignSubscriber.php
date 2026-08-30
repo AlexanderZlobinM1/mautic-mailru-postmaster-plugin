@@ -11,6 +11,7 @@ use Mautic\CampaignBundle\Event\CampaignExecutionEvent;
 use Mautic\CampaignBundle\Event\CampaignTriggerEvent;
 use Mautic\CampaignBundle\Event\PendingEvent;
 use MauticPlugin\MauticMailRuPostmasterBundle\Form\Type\CampaignGuardType;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardWatcherLauncher;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -25,6 +26,7 @@ final class CampaignSubscriber implements EventSubscriberInterface
     public function __construct(
         private readonly GuardService $guardService,
         private readonly GuardWatcherLauncher $watcherLauncher,
+        private readonly PostmasterConfiguration $configuration,
     ) {
     }
 
@@ -40,6 +42,10 @@ final class CampaignSubscriber implements EventSubscriberInterface
 
     public function onCampaignBuild(CampaignBuilderEvent $event): void
     {
+        if (!$this->configuration->isEnabled()) {
+            return;
+        }
+
         $event->addAction(self::EVENT_TYPE, [
             'label'                  => 'mailru.postmaster.guard.label',
             'description'            => 'mailru.postmaster.guard.description',
@@ -67,6 +73,12 @@ final class CampaignSubscriber implements EventSubscriberInterface
 
     public function onExecute(PendingEvent $pendingEvent): void
     {
+        if (!$this->configuration->isEnabled()) {
+            $pendingEvent->passAll();
+
+            return;
+        }
+
         // This is deliberately a database-only check. The API watcher runs in
         // a detached plugin process so campaign throughput never waits for it.
         $result = $this->guardService->evaluate($pendingEvent->getEvent(), source: 'campaign_execution');
@@ -85,6 +97,12 @@ final class CampaignSubscriber implements EventSubscriberInterface
             return;
         }
 
+        if (!$this->configuration->isEnabled()) {
+            $event->setResult(true);
+
+            return;
+        }
+
         // Conditions route contacts from the already stored current-day
         // snapshot. API polling remains detached from campaign throughput.
         $event->setResult($this->guardService->isThresholdSafe($event->getConfig()));
@@ -92,6 +110,10 @@ final class CampaignSubscriber implements EventSubscriberInterface
 
     public function onCampaignTrigger(CampaignTriggerEvent $event): void
     {
+        if (!$this->configuration->isEnabled()) {
+            return;
+        }
+
         $campaignId = $event->getCampaign()->getId();
         if (null === $campaignId) {
             return;

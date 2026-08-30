@@ -10,6 +10,7 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\EmailDomainProvider;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\ReportPeriodGrouper;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\ReportRowFiller;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -21,8 +22,13 @@ final class ReportController extends CommonController
         DomainStatRepository $repository,
         EmailDomainProvider $domainProvider,
         ReportRowFiller $rowFiller,
+        PostmasterConfiguration $configuration,
     ): Response
     {
+        if (!$configuration->isEnabled()) {
+            throw new NotFoundHttpException();
+        }
+
         if (!$this->mayViewReports()) {
             return $this->accessDenied();
         }
@@ -47,8 +53,13 @@ final class ReportController extends CommonController
         EmailDomainProvider $domainProvider,
         ReportPeriodGrouper $periodGrouper,
         ReportRowFiller $rowFiller,
+        PostmasterConfiguration $configuration,
     ): Response
     {
+        if (!$configuration->isEnabled()) {
+            throw new NotFoundHttpException();
+        }
+
         if (!$this->mayViewReports()) {
             return $this->accessDenied();
         }

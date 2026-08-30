@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4
+
+- Apply the integration switch to campaign controls, campaign execution,
+  detached watchers, reports, and console synchronization, not only to Mail.ru
+  API calls.
+- Disabled integrations now fail open for existing campaign nodes and cannot
+  stop a campaign from previously stored statistics.
+
 ## 0.6.3
 
 - Made the Sales Snap footer locale-aware: Russian Mautic locales use

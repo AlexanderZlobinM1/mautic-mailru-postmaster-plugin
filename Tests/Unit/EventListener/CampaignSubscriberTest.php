@@ -8,6 +8,7 @@ use Mautic\CampaignBundle\CampaignEvents;
 use Mautic\CampaignBundle\Entity\Event;
 use Mautic\CampaignBundle\Event\CampaignBuilderEvent;
 use MauticPlugin\MauticMailRuPostmasterBundle\EventListener\CampaignSubscriber;
+use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
 use PHPUnit\Framework\TestCase;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -18,7 +19,7 @@ final class CampaignSubscriberTest extends TestCase
         $translator = $this->createMock(TranslatorInterface::class);
         $translator->method('trans')->willReturnArgument(0);
         $builder = new CampaignBuilderEvent($translator);
-        $subscriber = (new \ReflectionClass(CampaignSubscriber::class))->newInstanceWithoutConstructor();
+        $subscriber = $this->subscriber(true);
 
         $subscriber->onCampaignBuild($builder);
 
@@ -36,7 +37,7 @@ final class CampaignSubscriberTest extends TestCase
         $translator = $this->createMock(TranslatorInterface::class);
         $translator->method('trans')->willReturnArgument(0);
         $builder = new CampaignBuilderEvent($translator);
-        $subscriber = (new \ReflectionClass(CampaignSubscriber::class))->newInstanceWithoutConstructor();
+        $subscriber = $this->subscriber(true);
 
         $subscriber->onCampaignBuild($builder);
 
@@ -64,5 +65,27 @@ final class CampaignSubscriberTest extends TestCase
         self::assertSame(['onCampaignTrigger', 0], $events[CampaignEvents::CAMPAIGN_ON_TRIGGER]);
         self::assertSame(['onConditionExecute', 0], $events[CampaignSubscriber::CONDITION_EXECUTE_EVENT]);
         self::assertCount(4, $events);
+    }
+
+    public function testDisabledIntegrationAddsNoCampaignControls(): void
+    {
+        $translator = $this->createMock(TranslatorInterface::class);
+        $builder = new CampaignBuilderEvent($translator);
+
+        $this->subscriber(false)->onCampaignBuild($builder);
+
+        self::assertArrayNotHasKey(CampaignSubscriber::EVENT_TYPE, $builder->getActions());
+        self::assertArrayNotHasKey(CampaignSubscriber::CONDITION_TYPE, $builder->getConditions());
+    }
+
+    private function subscriber(bool $enabled): CampaignSubscriber
+    {
+        $subscriber = (new \ReflectionClass(CampaignSubscriber::class))->newInstanceWithoutConstructor();
+        $configuration = $this->createMock(PostmasterConfiguration::class);
+        $configuration->method('isEnabled')->willReturn($enabled);
+        $property = new \ReflectionProperty(CampaignSubscriber::class, 'configuration');
+        $property->setValue($subscriber, $configuration);
+
+        return $subscriber;
     }
 }
