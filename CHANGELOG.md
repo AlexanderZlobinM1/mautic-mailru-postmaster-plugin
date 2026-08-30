@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3
+
+- Made the Sales Snap footer locale-aware: Russian Mautic locales use
+  `sales-snap.ru`, while every other locale uses `sales-snap.com`.
+
 ## 0.6.2
 
 - Remove the derived Sending status column from Postmaster reports. The report
