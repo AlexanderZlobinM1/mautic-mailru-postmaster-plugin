@@ -57,6 +57,8 @@ final class PluginSubscriber implements EventSubscriberInterface
         $isNew       = !$integration instanceof Integration;
         $integration = $isNew ? new Integration() : $integration;
         $integration->setName(MailRuPostmasterIntegration::NAME);
+        // Mautic 7.2 can dispatch before the Plugin entity is managed.
+        $this->entityManager->persist($plugin);
         $integration->setPlugin($plugin);
 
         if ($isNew) {

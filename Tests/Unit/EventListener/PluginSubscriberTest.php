@@ -17,6 +17,9 @@ final class PluginSubscriberTest extends TestCase
 {
     public function testInstallCreatesDisabledIntegrationConfiguration(): void
     {
+        $plugin = new Plugin();
+        $plugin->setBundle('MauticMailRuPostmasterBundle');
+
         $repository = $this->createMock(IntegrationRepository::class);
         $repository->expects(self::exactly(2))
             ->method('findOneByName')
@@ -26,9 +29,12 @@ final class PluginSubscriberTest extends TestCase
             ]);
 
         $entityManager = $this->createMock(EntityManagerInterface::class);
-        $entityManager->expects(self::once())
+        $entityManager->expects(self::exactly(2))
             ->method('persist')
-            ->with(self::callback(static function (object $entity): bool {
+            ->with(self::callback(static function (object $entity) use ($plugin): bool {
+                if ($entity === $plugin) {
+                    return true;
+                }
                 self::assertInstanceOf(Integration::class, $entity);
                 self::assertSame(MailRuPostmasterIntegration::NAME, $entity->getName());
                 self::assertFalse($entity->getIsPublished());
@@ -37,9 +43,6 @@ final class PluginSubscriberTest extends TestCase
                 return true;
             }));
 
-        $plugin = new Plugin();
-        $plugin->setBundle('MauticMailRuPostmasterBundle');
-
         (new PluginSubscriber($repository, $entityManager))->onInstall(
             new PluginInstallEvent($plugin, null, null),
         );
@@ -47,6 +50,9 @@ final class PluginSubscriberTest extends TestCase
 
     public function testInstallMigratesLegacyConfigurationWithoutLosingKeys(): void
     {
+        $plugin = new Plugin();
+        $plugin->setBundle('MauticMailRuPostmasterBundle');
+
         $legacy = new Integration();
         $legacy->setName('mailru_postmaster');
         $legacy->setApiKeys(['token_json' => 'encrypted-value']);
@@ -60,12 +66,9 @@ final class PluginSubscriberTest extends TestCase
             ]);
 
         $entityManager = $this->createMock(EntityManagerInterface::class);
-        $entityManager->expects(self::once())
+        $entityManager->expects(self::exactly(2))
             ->method('persist')
-            ->with($legacy);
-
-        $plugin = new Plugin();
-        $plugin->setBundle('MauticMailRuPostmasterBundle');
+            ->with(self::callback(static fn (object $entity) => $entity === $plugin || $entity === $legacy));
 
         (new PluginSubscriber($repository, $entityManager))->onInstall(
             new PluginInstallEvent($plugin, null, null),

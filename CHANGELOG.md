@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6 — 2026-09-06
+
+- Fix Mautic 7.2 plugin reloads by explicitly persisting the plugin before linking its native integration.
+
 ## 0.6.5 — 2026-09-06
 
 - Support Mautic 7.2 while retaining the declared older Mautic versions.
