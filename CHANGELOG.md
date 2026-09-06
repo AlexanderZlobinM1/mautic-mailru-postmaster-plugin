@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.5 — 2026-09-06
+
+- Support Mautic 7.2 while retaining the declared older Mautic versions.
+- Use a plugin-scoped EncryptionHelper service alias; keep legacy argument parsing and the global core container unchanged.
+- Add a fresh-kernel regression check that instantiates integration services and resolves form types.
+
+
 ## 0.6.4
 
 - Apply the integration switch to campaign controls, campaign execution,

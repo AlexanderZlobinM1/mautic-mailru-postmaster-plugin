@@ -21,6 +21,9 @@ return static function (ContainerConfigurator $configurator): void {
         ->autoconfigure()
         ->public();
 
+    // Legacy config.php treats FQCN arguments as strings, not service references.
+    $services->alias('mauticmailrupostmasterbundle.helper.encryption', \Mautic\CoreBundle\Helper\EncryptionHelper::class);
+
     $services->load('MauticPlugin\\MauticMailRuPostmasterBundle\\', '../')
         ->exclude('../{'.implode(',', array_merge(MauticCoreExtension::DEFAULT_EXCLUDES, [
             'Api/DomainNormalizer.php',
