@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.7 — 2026-09-24
+
+- Add the public read-only
+  `MauticPlugin\\MauticMailRuPostmasterBundle\\Service\\WarmupDomainSignalProvider`
+  service for optional WarmupMail integration. It exposes persisted Mail.ru
+  metrics for an exact DKIM `d=` domain without provider API or OAuth calls.
+- Publish explicit availability, freshness, sample-size and units while
+  keeping DNS authentication fields and provider credentials outside the
+  contract.
+
 ## 0.6.6 — 2026-09-06
 
 - Fix Mautic 7.2 plugin reloads by explicitly persisting the plugin before linking its native integration.

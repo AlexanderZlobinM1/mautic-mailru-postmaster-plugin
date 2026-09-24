@@ -118,6 +118,26 @@ class DomainStat
         return (int) $this->messagesSent;
     }
 
+    public function getDelivered(): int
+    {
+        return (int) $this->delivered;
+    }
+
+    public function getComplaints(): int
+    {
+        return (int) $this->complaints;
+    }
+
+    public function getSpam(): int
+    {
+        return (int) $this->spam;
+    }
+
+    public function getProbablySpam(): int
+    {
+        return (int) $this->probablySpam;
+    }
+
     public function getSpamPercent(): float
     {
         return (float) $this->spamPercent;
@@ -126,6 +146,16 @@ class DomainStat
     public function getProbablySpamPercent(): float
     {
         return (float) $this->probablySpamPercent;
+    }
+
+    public function getReputation(): float
+    {
+        return (float) $this->reputation;
+    }
+
+    public function getTrend(): float
+    {
+        return (float) $this->trend;
     }
 
     public function getSyncedAt(): \DateTimeImmutable

@@ -197,6 +197,38 @@ grep 'mailru_postmaster.guard_evaluation' var/logs/mailru_postmaster_guard-$(dat
 
 Удаление или выключение плагина не включает остановленные кампании автоматически.
 
+## Read-only contract for sibling plugins
+
+Optional plugins can read the latest persisted Mail.ru signal through the
+public container service
+`MauticPlugin\\MauticMailRuPostmasterBundle\\Service\\WarmupDomainSignalProvider`:
+
+```php
+// Keep the ID as a string so the consumer also works without this plugin.
+$serviceId = 'MauticPlugin\\MauticMailRuPostmasterBundle\\Service\\WarmupDomainSignalProvider';
+if ($container->has($serviceId)) {
+    $snapshot = $container->get($serviceId)
+        ->snapshot($exactDkimDomain);
+}
+```
+
+Consumers must look up the string service ID conditionally and must not require
+Postmaster classes in their own constructors. This keeps them operational when
+this plugin is absent or disabled. The service never calls Mail.ru and never
+performs OAuth; it only reads the latest `DomainStatRepository` row for an
+exact normalized DKIM `d=` domain. It returns `null` when the integration is
+disabled, the exact domain is not tracked, or the stored row is not fresh.
+
+The returned array contains `domain`, `statDate`, `syncedAt`, `messagesSent`,
+`delivered`, `complaints`, `spamPercent` and `probablySpamPercent`. Rates are
+Mail.ru percentage points (`0.5` means `0.5%`). Freshness uses the campaign
+guard rule: the row is for today and was synchronized no more than 1,200
+seconds ago.
+
+The DKIM domain is only the exact identity Mail.ru uses for the aggregate
+signal. The contract intentionally exposes no selector, private key or separate
+SPF/DKIM/DMARC/MX validation fields.
+
 ## Разработка и проверка
 
 ```bash

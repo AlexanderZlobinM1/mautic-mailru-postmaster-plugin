@@ -9,7 +9,7 @@ use Mautic\CoreBundle\Entity\CommonRepository;
 /**
  * @extends CommonRepository<DomainStat>
  */
-final class DomainStatRepository extends CommonRepository
+final class DomainStatRepository extends CommonRepository implements DomainStatReader
 {
     private const REPORT_WINDOW_DAYS = 30;
 

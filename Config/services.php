@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 use Doctrine\Bundle\DoctrineBundle\DependencyInjection\Compiler\ServiceRepositoryCompilerPass;
 use Mautic\CoreBundle\DependencyInjection\MauticCoreExtension;
+use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatReader;
+use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\CampaignWatchRegistry;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardWatcherLauncher;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\RuntimeApiThrottle;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\WarmupDomainSignalProvider;
 use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -44,6 +47,9 @@ return static function (ContainerConfigurator $configurator): void {
 
     $services->load('MauticPlugin\\MauticMailRuPostmasterBundle\\Entity\\', '../Entity/*Repository.php')
         ->tag(ServiceRepositoryCompilerPass::REPOSITORY_SERVICE_TAG);
+
+    $services->alias(DomainStatReader::class, DomainStatRepository::class);
+    $services->get(WarmupDomainSignalProvider::class)->public();
 
     $services->set('mailru.postmaster.guard_audit_handler', RotatingFileHandler::class)
         ->args([
