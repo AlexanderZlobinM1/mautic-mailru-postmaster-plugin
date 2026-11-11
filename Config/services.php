@@ -7,6 +7,7 @@ use Mautic\CoreBundle\DependencyInjection\MauticCoreExtension;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatReader;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\CampaignWatchRegistry;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\ConditionRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardWatcherLauncher;
@@ -49,6 +50,7 @@ return static function (ContainerConfigurator $configurator): void {
         ->tag(ServiceRepositoryCompilerPass::REPOSITORY_SERVICE_TAG);
 
     $services->alias(DomainStatReader::class, DomainStatRepository::class);
+    $services->alias(ConditionRuntimePoller::class, GuardRuntimePoller::class);
     $services->get(WarmupDomainSignalProvider::class)->public();
 
     $services->set('mailru.postmaster.guard_audit_handler', RotatingFileHandler::class)

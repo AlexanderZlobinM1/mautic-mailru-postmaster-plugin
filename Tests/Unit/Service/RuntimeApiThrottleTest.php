@@ -104,4 +104,35 @@ final class RuntimeApiThrottleTest extends TestCase
             rmdir($stateDir);
         }
     }
+
+    public function testConditionWaitIsBoundedWhenConcurrentPollDoesNotFinish(): void
+    {
+        $stateDir = sys_get_temp_dir().'/mailru-postmaster-throttle-'.bin2hex(random_bytes(8));
+        mkdir($stateDir, 0770, true);
+        $path = $stateDir.'/domain-'.hash('sha256', 'example.test').'.json';
+        $handle = fopen($path, 'c+');
+        self::assertIsResource($handle);
+        self::assertTrue(flock($handle, LOCK_EX | LOCK_NB));
+
+        try {
+            $startedAt = microtime(true);
+            $result = (new RuntimeApiThrottle($stateDir, 60))->runIfDueAndWait(
+                'example.test',
+                static fn (): int => 1,
+                0.06,
+            );
+            $elapsed = microtime(true) - $startedAt;
+
+            self::assertFalse($result->attempted);
+            self::assertFalse($result->successful);
+            self::assertSame('', $result->generation);
+            self::assertGreaterThanOrEqual(0.05, $elapsed);
+            self::assertLessThan(0.2, $elapsed);
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+            unlink($path);
+            rmdir($stateDir);
+        }
+    }
 }

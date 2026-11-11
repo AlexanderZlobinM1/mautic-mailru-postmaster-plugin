@@ -70,6 +70,29 @@ final class RuntimeApiThrottle
         }
     }
 
+    /**
+     * Wait briefly for a concurrent poll to publish its generation so a
+     * campaign condition does not decide from the previous snapshot while the
+     * same-domain API request is already in flight.
+     *
+     * @param callable(): mixed $operation
+     */
+    public function runIfDueAndWait(
+        string $domain,
+        callable $operation,
+        float $maxWaitSeconds = 8.0,
+    ): RuntimeThrottleResult {
+        $deadline = microtime(true) + max(0.0, $maxWaitSeconds);
+        do {
+            $result = $this->runIfDue($domain, $operation);
+            if ('' !== $result->generation || microtime(true) >= $deadline) {
+                return $result;
+            }
+
+            usleep(50_000);
+        } while (true);
+    }
+
     private function ensureStateDirectory(): void
     {
         if (is_dir($this->stateDir)) {

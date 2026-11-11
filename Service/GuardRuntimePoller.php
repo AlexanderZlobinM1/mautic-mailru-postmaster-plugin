@@ -10,7 +10,7 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Api\PostmasterApiClient;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
 use Psr\Log\LoggerInterface;
 
-final class GuardRuntimePoller
+final class GuardRuntimePoller implements ConditionRuntimePoller
 {
     public function __construct(
         private readonly PostmasterApiClient $apiClient,
@@ -30,13 +30,23 @@ final class GuardRuntimePoller
 
     public function pollDomain(string $domain, string $source): RuntimePollResult
     {
+        return $this->pollDomainWithMode($domain, $source, false);
+    }
+
+    public function pollDomainForDecision(string $domain, string $source): RuntimePollResult
+    {
+        return $this->pollDomainWithMode($domain, $source, true);
+    }
+
+    private function pollDomainWithMode(string $domain, string $source, bool $waitForConcurrent): RuntimePollResult
+    {
         $domain = DomainNormalizer::normalize($domain);
         if (null === $domain) {
             return RuntimePollResult::noDomain();
         }
 
         try {
-            $attempt = $this->throttle->runIfDue($domain, function () use ($domain): int {
+            $operation = function () use ($domain): int {
                 $statDate = new \DateTimeImmutable('today');
                 $storedRows = 0;
                 foreach ($this->apiClient->getDetailedStatistics($statDate, $statDate, $domain) as $domainBlock) {
@@ -64,7 +74,10 @@ final class GuardRuntimePoller
                 }
 
                 return $storedRows;
-            });
+            };
+            $attempt = $waitForConcurrent
+                ? $this->throttle->runIfDueAndWait($domain, $operation)
+                : $this->throttle->runIfDue($domain, $operation);
         } catch (\Throwable $exception) {
             $this->logger->warning('mailru_postmaster.runtime_poll_failed', [
                 'source'    => $source,

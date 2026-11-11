@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.8 — 2026-11-11
+
+- Make the two-route Mail.ru threshold condition refresh its domain through
+  the same runtime poller and shared seven-second throttle as the campaign
+  stopper before choosing the branch.
+- Wait for an already-running same-domain poll for up to eight seconds so the
+  condition does not race past a response that is about to update the stored
+  snapshot.
+- Record one condition decision per new poll generation in the guard audit log,
+  including the selected route, provider values and configured thresholds.
+
 ## 0.6.7 — 2026-09-24
 
 - Add the public read-only

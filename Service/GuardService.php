@@ -12,7 +12,7 @@ use Mautic\CampaignBundle\Model\Exceptions\CampaignAlreadyUnpublishedException;
 use Mautic\CampaignBundle\Model\Exceptions\CampaignVersionMismatchedException;
 use MauticPlugin\MauticMailRuPostmasterBundle\Api\DomainNormalizer;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStat;
-use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
+use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatReader;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStop;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStopRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\EventListener\CampaignSubscriber;
@@ -22,12 +22,16 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class GuardService
 {
+    /** @var array<string, string> */
+    private array $conditionAuditGenerations = [];
+
     public function __construct(
         private readonly EventRepository $eventRepository,
         private readonly EntityManagerInterface $entityManager,
         private readonly GuardDomainResolver $domainResolver,
         private readonly ThresholdEvaluator $thresholdEvaluator,
-        private readonly DomainStatRepository $statRepository,
+        private readonly DomainStatReader $statRepository,
+        private readonly ConditionRuntimePoller $runtimePoller,
         private readonly GuardStopRepository $stopRepository,
         private readonly CampaignModel $campaignModel,
         private readonly LoggerInterface $logger,
@@ -161,14 +165,35 @@ final class GuardService
             return true;
         }
 
+        $poll = $this->runtimePoller->pollDomainForDecision($domain, 'campaign_condition');
         $stat = $this->statRepository->getLatestForDomain($domain);
-        if (!$stat instanceof DomainStat
-            || $stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')
-            || $stat->getSyncedAt() < $now->modify('-20 minutes')) {
+        if (!$stat instanceof DomainStat) {
+            $this->auditConditionDecision($poll, $domain, $properties, null, true, 'safe_no_stats');
+
+            return true;
+        }
+        if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
+            $this->auditConditionDecision($poll, $domain, $properties, $stat, true, 'safe_not_today');
+
+            return true;
+        }
+        if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
+            $this->auditConditionDecision($poll, $domain, $properties, $stat, true, 'safe_stale');
+
             return true;
         }
 
-        return null === $this->thresholdEvaluator->findBreach($stat, $properties);
+        $safe = null === $this->thresholdEvaluator->findBreach($stat, $properties);
+        $this->auditConditionDecision(
+            $poll,
+            $domain,
+            $properties,
+            $stat,
+            $safe,
+            $safe ? 'safe_below_threshold' : 'unsafe_threshold_breach',
+        );
+
+        return $safe;
     }
 
     public function evaluate(
@@ -319,6 +344,41 @@ final class GuardService
         ]);
 
         return $stopped ? GuardResult::stopped($reason) : GuardResult::pass($reason);
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     */
+    private function auditConditionDecision(
+        RuntimePollResult $poll,
+        string $domain,
+        array $properties,
+        ?DomainStat $stat,
+        bool $safe,
+        string $decision,
+    ): void {
+        if ('' === $poll->generation
+            || ($this->conditionAuditGenerations[$domain] ?? null) === $poll->generation) {
+            return;
+        }
+        $this->conditionAuditGenerations[$domain] = $poll->generation;
+
+        $this->logger->info('mailru_postmaster.condition_evaluation', [
+            'decision'                  => $decision,
+            'route'                     => $safe ? 'yes' : 'no',
+            'domain'                    => $domain,
+            'poll_attempted'             => $poll->attempted,
+            'poll_successful'            => $poll->successful,
+            'poll_generation'            => $poll->generation,
+            'poll_stored_rows'           => $poll->storedRows,
+            'stat_date'                  => $stat?->getStatDate()->format('Y-m-d'),
+            'stat_synced_at'             => $stat?->getSyncedAt()->format(DATE_ATOM),
+            'messages_sent'              => $stat?->getMessagesSent(),
+            'probably_spam_percent'      => $stat?->getProbablySpamPercent(),
+            'probably_spam_threshold'    => (float) ($properties['probably_spam_threshold'] ?? 100),
+            'spam_percent'               => $stat?->getSpamPercent(),
+            'spam_threshold'             => (float) ($properties['spam_threshold'] ?? 100),
+        ]);
     }
 
     private function isActiveMonitor(Event $event, \DateTimeImmutable $now): bool
