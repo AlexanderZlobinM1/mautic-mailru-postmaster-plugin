@@ -45,23 +45,46 @@ final class RuntimeApiThrottle
                 );
             }
 
-            $value = null;
-            $error = null;
-            try {
-                $value = $operation();
-            } catch (\Throwable $exception) {
-                $error = $exception;
+            return $this->executeAndPersist($handle, $operation);
+        } finally {
+            if ($locked) {
+                flock($handle, LOCK_UN);
+            }
+            fclose($handle);
+        }
+    }
+
+    /**
+     * Queue a required API read behind every other process polling the same
+     * domain. Unlike runIfDue(), this method always executes the operation,
+     * but only after the shared seven-second interval has elapsed.
+     *
+     * @param callable(): mixed $operation
+     */
+    public function runQueued(string $domain, callable $operation): RuntimeThrottleResult
+    {
+        $this->ensureStateDirectory();
+        $path = $this->statePath($domain);
+        $handle = fopen($path, 'c+');
+        if (false === $handle) {
+            throw new \RuntimeException('Cannot open the Mail.ru Postmaster runtime poll lock.');
+        }
+
+        $locked = false;
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                throw new \RuntimeException('Cannot lock the Mail.ru Postmaster runtime poll queue.');
+            }
+            $locked = true;
+
+            $state = $this->readState($handle);
+            $completedAt = (float) ($state['completed_at'] ?? 0.0);
+            $remaining = $this->intervalSeconds - (microtime(true) - $completedAt);
+            if ($completedAt > 0 && $remaining > 0) {
+                usleep((int) ceil($remaining * 1_000_000));
             }
 
-            $completedAt = microtime(true);
-            $generation = sprintf('%.6f', $completedAt);
-            $this->writeState($handle, [
-                'completed_at' => $completedAt,
-                'generation'   => $generation,
-                'successful'   => null === $error,
-            ]);
-
-            return RuntimeThrottleResult::attempted($generation, $value, $error);
+            return $this->executeAndPersist($handle, $operation);
         } finally {
             if ($locked) {
                 flock($handle, LOCK_UN);
@@ -108,6 +131,31 @@ final class RuntimeApiThrottle
         return rtrim($this->stateDir, DIRECTORY_SEPARATOR)
             .DIRECTORY_SEPARATOR
             .'domain-'.hash('sha256', strtolower($domain)).'.json';
+    }
+
+    /**
+     * @param resource          $handle
+     * @param callable(): mixed $operation
+     */
+    private function executeAndPersist($handle, callable $operation): RuntimeThrottleResult
+    {
+        $value = null;
+        $error = null;
+        try {
+            $value = $operation();
+        } catch (\Throwable $exception) {
+            $error = $exception;
+        }
+
+        $completedAt = microtime(true);
+        $generation = sprintf('%.6f', $completedAt);
+        $this->writeState($handle, [
+            'completed_at' => $completedAt,
+            'generation'   => $generation,
+            'successful'   => null === $error,
+        ]);
+
+        return RuntimeThrottleResult::attempted($generation, $value, $error);
     }
 
     /**

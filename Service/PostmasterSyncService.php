@@ -11,7 +11,6 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatRepository;
 final class PostmasterSyncService
 {
     private const MAX_DETAILED_PERIOD_DAYS = 30;
-    private const API_REQUEST_SPACING_SECONDS = 7;
     private const ROLLING_WINDOW_DAYS = 30;
     private const RETENTION_DAYS = 30;
 
@@ -21,6 +20,7 @@ final class PostmasterSyncService
         private readonly DomainStatRepository $statRepository,
         private readonly GuardService $guardService,
         private readonly GuardRuntimePoller $runtimePoller,
+        private readonly RuntimeApiThrottle $runtimeThrottle,
     ) {
     }
 
@@ -51,15 +51,24 @@ final class PostmasterSyncService
         $syncedAt      = new \DateTimeImmutable();
 
         if ([] !== $trackedDomains) {
-            /** @var array<string, float> $lastRequestAt */
-            $lastRequestAt = [];
             // Keep API reads explicitly scoped to this Mautic instance's
             // verified sender domains instead of requesting every domain
             // registered under the shared Mail.ru account.
             foreach ($trackedDomains as $requestedDomain) {
                 foreach ($this->splitPeriods($dateFrom, $dateTo) as [$periodFrom, $periodTo]) {
-                    $this->throttleDomain($requestedDomain, $lastRequestAt);
-                    foreach ($this->apiClient->getDetailedStatistics($periodFrom, $periodTo, $requestedDomain) as $domainBlock) {
+                    $attempt = $this->runtimeThrottle->runQueued(
+                        $requestedDomain,
+                        fn (): array => $this->apiClient->getDetailedStatistics(
+                            $periodFrom,
+                            $periodTo,
+                            $requestedDomain,
+                        ),
+                    );
+                    if ($attempt->error instanceof \Throwable) {
+                        throw $attempt->error;
+                    }
+                    $domainBlocks = is_array($attempt->value) ? $attempt->value : [];
+                    foreach ($domainBlocks as $domainBlock) {
                         $domain = DomainNormalizer::normalize((string) ($domainBlock['domain'] ?? ''));
                         if ($domain !== $requestedDomain || !isset($trackedLookup[$domain])) {
                             continue;
@@ -98,21 +107,6 @@ final class PostmasterSyncService
             $storedRows,
             $this->guardService->evaluateAll($syncedAt),
         );
-    }
-
-    /**
-     * @param array<string, float> $lastRequestAt
-     */
-    private function throttleDomain(string $domain, array &$lastRequestAt): void
-    {
-        $now = microtime(true);
-        if (isset($lastRequestAt[$domain])) {
-            $remaining = self::API_REQUEST_SPACING_SECONDS - ($now - $lastRequestAt[$domain]);
-            if ($remaining > 0) {
-                usleep((int) ceil($remaining * 1_000_000));
-            }
-        }
-        $lastRequestAt[$domain] = microtime(true);
     }
 
     public function syncActiveGuardDomains(?\DateTimeImmutable $now = null): SyncResult

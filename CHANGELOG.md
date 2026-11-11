@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.10 — 2026-11-11
+
+- Put scheduled report synchronization and fast campaign polling through one
+  inter-process seven-second queue for each sender domain.
+- Keep different domains independent, matching Mail.ru's documented limit of
+  ten statistics requests per minute per domain and account.
+- Make required scheduled reads wait for the shared domain slot instead of
+  racing a condition or stopper request and risking a provider 429 response.
+
 ## 0.6.9 — 2026-11-11
 
 - Remove the plugin-specific rotating audit logger and route threshold events

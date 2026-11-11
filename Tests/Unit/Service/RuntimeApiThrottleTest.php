@@ -135,4 +135,40 @@ final class RuntimeApiThrottleTest extends TestCase
             rmdir($stateDir);
         }
     }
+
+    public function testRequiredSyncQueuesBehindSharedDomainInterval(): void
+    {
+        $stateDir = sys_get_temp_dir().'/mailru-postmaster-throttle-'.bin2hex(random_bytes(8));
+        mkdir($stateDir, 0770, true);
+        $path = $stateDir.'/domain-'.hash('sha256', 'example.test').'.json';
+        file_put_contents($path, json_encode([
+            'completed_at' => microtime(true) - 0.94,
+            'generation'   => 'previous',
+            'successful'   => true,
+        ], JSON_THROW_ON_ERROR));
+        $calls = 0;
+
+        try {
+            $startedAt = microtime(true);
+            $result = (new RuntimeApiThrottle($stateDir, 1))->runQueued(
+                'example.test',
+                static function () use (&$calls): int {
+                    ++$calls;
+
+                    return 7;
+                },
+            );
+            $elapsed = microtime(true) - $startedAt;
+
+            self::assertTrue($result->attempted);
+            self::assertTrue($result->successful);
+            self::assertSame(7, $result->value);
+            self::assertSame(1, $calls);
+            self::assertGreaterThanOrEqual(0.04, $elapsed);
+            self::assertLessThan(0.3, $elapsed);
+        } finally {
+            unlink($path);
+            rmdir($stateDir);
+        }
+    }
 }
