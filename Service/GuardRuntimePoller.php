@@ -94,13 +94,6 @@ final class GuardRuntimePoller implements ConditionRuntimePoller
                 'domain'    => $domain,
                 'exception' => $attempt->error,
             ]);
-        } elseif ($attempt->attempted) {
-            $this->logger->info('mailru_postmaster.runtime_poll', [
-                'source'      => $source,
-                'domain'      => $domain,
-                'generation'  => $attempt->generation,
-                'stored_rows' => (int) $attempt->value,
-            ]);
         }
 
         return new RuntimePollResult(

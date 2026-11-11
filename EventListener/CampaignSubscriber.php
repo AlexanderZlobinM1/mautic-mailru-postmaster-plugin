@@ -105,7 +105,18 @@ final class CampaignSubscriber implements EventSubscriberInterface
 
         // Conditions route contacts from the already stored current-day
         // snapshot. API polling remains detached from campaign throughput.
-        $event->setResult($this->guardService->isThresholdSafe($event->getConfig()));
+        $eventDefinition = $event->getEvent();
+        $monitorIdentity = is_array($eventDefinition)
+            ? sprintf(
+                'campaign-%s-event-%s',
+                (string) ($eventDefinition['campaign']['id'] ?? 'unknown'),
+                (string) ($eventDefinition['id'] ?? 'unknown'),
+            )
+            : null;
+        $event->setResult($this->guardService->isThresholdSafe(
+            $event->getConfig(),
+            monitorIdentity: $monitorIdentity,
+        ));
     }
 
     public function onCampaignTrigger(CampaignTriggerEvent $event): void

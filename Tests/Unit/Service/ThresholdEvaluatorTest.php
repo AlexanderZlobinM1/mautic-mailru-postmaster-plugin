@@ -48,6 +48,27 @@ final class ThresholdEvaluatorTest extends TestCase
         ]));
     }
 
+    public function testAllExceededMetricsAreAvailableForThresholdAudit(): void
+    {
+        $stat = $this->stat(0.81, 0.73);
+
+        self::assertSame([
+            [
+                'metric'    => 'spam_percent',
+                'actual'    => 0.81,
+                'threshold' => 0.5,
+            ],
+            [
+                'metric'    => 'probably_spam_percent',
+                'actual'    => 0.73,
+                'threshold' => 0.5,
+            ],
+        ], (new ThresholdEvaluator())->findBreaches($stat, [
+            'spam_threshold'          => 0.5,
+            'probably_spam_threshold' => 0.5,
+        ]));
+    }
+
     private function stat(float $spamPercent, float $probablySpamPercent): DomainStat
     {
         $now = new \DateTimeImmutable('2026-08-11 13:40:28');

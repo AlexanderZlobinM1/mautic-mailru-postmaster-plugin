@@ -15,6 +15,16 @@ final class ThresholdEvaluator
      */
     public function findBreach(DomainStat $stat, array $properties): ?array
     {
+        return $this->findBreaches($stat, $properties)[0] ?? null;
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     *
+     * @return list<array{metric: string, actual: float, threshold: float}>
+     */
+    public function findBreaches(DomainStat $stat, array $properties): array
+    {
         $checks = [
             [
                 'metric'    => 'spam_percent',
@@ -28,12 +38,9 @@ final class ThresholdEvaluator
             ],
         ];
 
-        foreach ($checks as $check) {
-            if ($check['actual'] > $check['threshold']) {
-                return $check;
-            }
-        }
-
-        return null;
+        return array_values(array_filter(
+            $checks,
+            static fn (array $check): bool => $check['actual'] > $check['threshold'],
+        ));
     }
 }

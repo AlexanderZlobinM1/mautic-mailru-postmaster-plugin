@@ -12,9 +12,8 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardWatcherLauncher;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\RuntimeApiThrottle;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\ThresholdEventLogger;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\WarmupDomainSignalProvider;
-use Monolog\Handler\RotatingFileHandler;
-use Monolog\Logger;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
@@ -53,25 +52,15 @@ return static function (ContainerConfigurator $configurator): void {
     $services->alias(ConditionRuntimePoller::class, GuardRuntimePoller::class);
     $services->get(WarmupDomainSignalProvider::class)->public();
 
-    $services->set('mailru.postmaster.guard_audit_handler', RotatingFileHandler::class)
-        ->args([
-            '%kernel.logs_dir%/mailru_postmaster_guard.log',
-            30,
-            Logger::INFO,
-        ]);
-
-    $services->set('mailru.postmaster.guard_audit_logger', Logger::class)
-        ->args(['mailru_postmaster_guard'])
-        ->call('pushHandler', [service('mailru.postmaster.guard_audit_handler')]);
-
-    $services->get(GuardService::class)
-        ->arg('$logger', service('mailru.postmaster.guard_audit_logger'));
+    $services->get(ThresholdEventLogger::class)
+        ->arg('$logger', service('monolog.logger.mautic'))
+        ->arg('$stateDir', '%kernel.cache_dir%/mailru-postmaster-runtime/threshold-events');
 
     $services->get(GuardRuntimePoller::class)
-        ->arg('$logger', service('mailru.postmaster.guard_audit_logger'));
+        ->arg('$logger', service('monolog.logger.mautic'));
 
     $services->get(GuardWatcherLauncher::class)
-        ->arg('$logger', service('mailru.postmaster.guard_audit_logger'))
+        ->arg('$logger', service('monolog.logger.mautic'))
         ->arg('$consolePath', '%kernel.project_dir%/bin/console');
 
     $services->get(CampaignWatchRegistry::class)

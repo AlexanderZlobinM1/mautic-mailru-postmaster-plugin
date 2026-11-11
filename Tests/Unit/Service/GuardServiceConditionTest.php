@@ -10,12 +10,31 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguratio
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\ConditionRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\RuntimePollResult;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\ThresholdEventLogger;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\ThresholdEvaluator;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 final class GuardServiceConditionTest extends TestCase
 {
+    /** @var list<string> */
+    private array $stateDirs = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->stateDirs as $directory) {
+            if (!is_dir($directory)) {
+                continue;
+            }
+            foreach (scandir($directory) ?: [] as $name) {
+                if ('.' !== $name && '..' !== $name) {
+                    unlink($directory.DIRECTORY_SEPARATOR.$name);
+                }
+            }
+            rmdir($directory);
+        }
+    }
+
     public function testConditionPollsBeforeChoosingExceededRoute(): void
     {
         $now = new \DateTimeImmutable('2026-11-11 12:00:00+01:00');
@@ -31,11 +50,12 @@ final class GuardServiceConditionTest extends TestCase
         ]));
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects(self::once())
-            ->method('info')
+            ->method('warning')
             ->with(
-                'mailru_postmaster.condition_evaluation',
-                self::callback(static fn (array $context): bool => 'no' === $context['route']
+                'mailru_postmaster.condition_threshold_triggered',
+                self::callback(static fn (array $context): bool => 'route_no' === $context['action']
                     && 'generation-1' === $context['poll_generation']
+                    && ['spam_percent'] === $context['triggered_metrics']
                     && 1.25 === $context['spam_percent']),
             );
 
@@ -61,13 +81,7 @@ final class GuardServiceConditionTest extends TestCase
         );
         $reader = new ConditionStatReaderStub($order, null);
         $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects(self::once())
-            ->method('info')
-            ->with(
-                'mailru_postmaster.condition_evaluation',
-                self::callback(static fn (array $context): bool => 'yes' === $context['route']
-                    && 'safe_no_stats' === $context['decision']),
-            );
+        $logger->expects(self::never())->method('warning');
 
         self::assertTrue($this->service(true, $poller, $reader, $logger)->isThresholdSafe([
             'domain' => 'mail.example.org',
@@ -86,7 +100,7 @@ final class GuardServiceConditionTest extends TestCase
         );
         $reader = new ConditionStatReaderStub($order, null);
         $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects(self::never())->method('info');
+        $logger->expects(self::never())->method('warning');
 
         self::assertTrue($this->service(false, $poller, $reader, $logger)->isThresholdSafe([
             'domain' => 'mail.example.org',
@@ -109,12 +123,20 @@ final class GuardServiceConditionTest extends TestCase
             'runtimePoller' => $poller,
             'statRepository' => $reader,
             'thresholdEvaluator' => new ThresholdEvaluator(),
-            'logger' => $logger,
+            'thresholdEventLogger' => new ThresholdEventLogger($logger, $this->stateDir()),
         ] as $property => $value) {
             (new \ReflectionProperty(GuardService::class, $property))->setValue($service, $value);
         }
 
         return $service;
+    }
+
+    private function stateDir(): string
+    {
+        $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'mailru-postmaster-condition-'.bin2hex(random_bytes(8));
+        $this->stateDirs[] = $directory;
+
+        return $directory;
     }
 
     /** @param array<string, int|float> $data */

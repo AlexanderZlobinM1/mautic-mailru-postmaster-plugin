@@ -17,14 +17,10 @@ use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStop;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStopRepository;
 use MauticPlugin\MauticMailRuPostmasterBundle\EventListener\CampaignSubscriber;
 use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
-use Psr\Log\LoggerInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class GuardService
 {
-    /** @var array<string, string> */
-    private array $conditionAuditGenerations = [];
-
     public function __construct(
         private readonly EventRepository $eventRepository,
         private readonly EntityManagerInterface $entityManager,
@@ -34,7 +30,7 @@ final class GuardService
         private readonly ConditionRuntimePoller $runtimePoller,
         private readonly GuardStopRepository $stopRepository,
         private readonly CampaignModel $campaignModel,
-        private readonly LoggerInterface $logger,
+        private readonly ThresholdEventLogger $thresholdEventLogger,
         private readonly TranslatorInterface $translator,
         private readonly PostmasterConfiguration $configuration,
     ) {
@@ -153,7 +149,11 @@ final class GuardService
      *
      * @param array<string, mixed> $properties
      */
-    public function isThresholdSafe(array $properties, ?\DateTimeImmutable $now = null): bool
+    public function isThresholdSafe(
+        array $properties,
+        ?\DateTimeImmutable $now = null,
+        ?string $monitorIdentity = null,
+    ): bool
     {
         if (!$this->configuration->isEnabled()) {
             return true;
@@ -168,29 +168,33 @@ final class GuardService
         $poll = $this->runtimePoller->pollDomainForDecision($domain, 'campaign_condition');
         $stat = $this->statRepository->getLatestForDomain($domain);
         if (!$stat instanceof DomainStat) {
-            $this->auditConditionDecision($poll, $domain, $properties, null, true, 'safe_no_stats');
-
             return true;
         }
         if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
-            $this->auditConditionDecision($poll, $domain, $properties, $stat, true, 'safe_not_today');
-
             return true;
         }
         if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
-            $this->auditConditionDecision($poll, $domain, $properties, $stat, true, 'safe_stale');
-
             return true;
         }
 
-        $safe = null === $this->thresholdEvaluator->findBreach($stat, $properties);
-        $this->auditConditionDecision(
-            $poll,
-            $domain,
-            $properties,
-            $stat,
-            $safe,
-            $safe ? 'safe_below_threshold' : 'unsafe_threshold_breach',
+        $breaches = $this->thresholdEvaluator->findBreaches($stat, $properties);
+        $safe = [] === $breaches;
+        $this->thresholdEventLogger->observe(
+            'condition',
+            $this->conditionThresholdIdentity($domain, $properties, $monitorIdentity),
+            $breaches,
+            [
+                'action'                  => 'route_no',
+                'domain'                  => $domain,
+                'poll_generation'         => $poll->generation,
+                'stat_date'               => $stat->getStatDate()->format('Y-m-d'),
+                'stat_synced_at'          => $stat->getSyncedAt()->format(DATE_ATOM),
+                'messages_sent'           => $stat->getMessagesSent(),
+                'probably_spam_percent'   => $stat->getProbablySpamPercent(),
+                'probably_spam_threshold' => (float) ($properties['probably_spam_threshold'] ?? 100),
+                'spam_percent'            => $stat->getSpamPercent(),
+                'spam_threshold'          => (float) ($properties['spam_threshold'] ?? 100),
+            ],
         );
 
         return $safe;
@@ -214,31 +218,39 @@ final class GuardService
         if (null === $domain) {
             $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_domain');
 
-            return $this->auditResult($event, $source, $now, $emailId, null, $properties, null, 'pass_no_domain', $reason);
+            return GuardResult::pass($reason);
         }
 
         $stat = $this->statRepository->getLatestForDomain($domain);
         if (!$stat instanceof DomainStat) {
             $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
 
-            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, null, 'pass_no_stats', $reason);
+            return GuardResult::pass($reason);
         }
 
         if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
             $reason = $this->translator->trans('mailru.postmaster.guard.reason.not_today');
 
-            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_not_today', $reason);
+            return GuardResult::pass($reason);
         }
 
         if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
             $reason = $this->translator->trans('mailru.postmaster.guard.reason.stale');
 
-            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_stale', $reason);
+            return GuardResult::pass($reason);
         }
 
-        $breach = $this->thresholdEvaluator->findBreach($stat, $properties);
+        $breaches = $this->thresholdEvaluator->findBreaches($stat, $properties);
+        $breach = $breaches[0] ?? null;
         if (null === $breach) {
-            return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'pass_below_threshold');
+            $this->thresholdEventLogger->observe(
+                'guard',
+                $this->guardThresholdIdentity($event, $domain, $properties),
+                [],
+                [],
+            );
+
+            return GuardResult::pass();
         }
 
         $campaign = $event->getCampaign();
@@ -256,36 +268,11 @@ final class GuardService
         } catch (CampaignAlreadyUnpublishedException) {
             $alreadyUnpublished = $this->translator->trans('mailru.postmaster.guard.reason.already_unpublished');
 
-            return $this->auditResult(
-                $event,
-                $source,
-                $now,
-                $emailId,
-                $domain,
-                $properties,
-                $stat,
-                'pass_already_unpublished',
-                $alreadyUnpublished,
-            );
-        } catch (CampaignVersionMismatchedException $exception) {
-            $this->logger->warning(
-                $reason.' '.$this->translator->trans('mailru.postmaster.guard.reason.version_changed_log'),
-                ['exception' => $exception],
-            );
-
+            return GuardResult::pass($alreadyUnpublished);
+        } catch (CampaignVersionMismatchedException) {
             $versionChanged = $this->translator->trans('mailru.postmaster.guard.reason.version_changed');
 
-            return $this->auditResult(
-                $event,
-                $source,
-                $now,
-                $emailId,
-                $domain,
-                $properties,
-                $stat,
-                'pass_version_changed',
-                $versionChanged,
-            );
+            return GuardResult::pass($versionChanged);
         }
 
         $this->stopRepository->save(GuardStop::create(
@@ -298,86 +285,53 @@ final class GuardService
             $stat->getStatDate(),
             $now,
         ));
-        $this->logger->warning($reason);
+        $this->thresholdEventLogger->observe(
+            'guard',
+            $this->guardThresholdIdentity($event, $domain, $properties),
+            $breaches,
+            [
+                'action'                  => 'campaign_stopped',
+                'reason'                  => $reason,
+                'campaign_id'             => $campaign->getId(),
+                'campaign_name'           => $campaign->getName(),
+                'guard_event_id'          => $event->getId(),
+                'email_id'                => $emailId > 0 ? $emailId : null,
+                'domain'                  => $domain,
+                'stat_date'               => $stat->getStatDate()->format('Y-m-d'),
+                'stat_synced_at'          => $stat->getSyncedAt()->format(DATE_ATOM),
+                'messages_sent'           => $stat->getMessagesSent(),
+                'probably_spam_percent'   => $stat->getProbablySpamPercent(),
+                'probably_spam_threshold' => (float) ($properties['probably_spam_threshold'] ?? 100),
+                'spam_percent'            => $stat->getSpamPercent(),
+                'spam_threshold'          => (float) ($properties['spam_threshold'] ?? 100),
+            ],
+        );
 
-        return $this->auditResult($event, $source, $now, $emailId, $domain, $properties, $stat, 'stopped', $reason, true);
+        return GuardResult::stopped($reason);
     }
 
-    /**
-     * @param array<string, mixed> $properties
-     */
-    private function auditResult(
-        Event $event,
-        string $source,
-        \DateTimeImmutable $now,
-        int $emailId,
-        ?string $domain,
-        array $properties,
-        ?DomainStat $stat,
-        string $decision,
-        string $reason = '',
-        bool $stopped = false,
-    ): GuardResult
-    {
-        $campaign = $event->getCampaign();
-        $syncedAt = $stat?->getSyncedAt();
-        $this->logger->warning('mailru_postmaster.guard_evaluation', [
-            'source'                       => $source,
-            'decision'                     => $decision,
-            'reason'                       => $reason,
-            'evaluated_at'                 => $now->format(DATE_ATOM),
-            'campaign_id'                  => $campaign->getId(),
-            'campaign_name'                => $campaign->getName(),
-            'guard_event_id'               => $event->getId(),
-            'email_id'                     => $emailId > 0 ? $emailId : null,
-            'domain'                       => $domain,
-            'stat_date'                    => $stat?->getStatDate()->format('Y-m-d'),
-            'stat_synced_at'               => $syncedAt?->format(DATE_ATOM),
-            'stat_age_seconds'             => $syncedAt instanceof \DateTimeImmutable
-                ? max(0, $now->getTimestamp() - $syncedAt->getTimestamp())
-                : null,
-            'messages_sent'                => $stat?->getMessagesSent(),
-            'probably_spam_percent'        => $stat?->getProbablySpamPercent(),
-            'probably_spam_threshold'      => (float) ($properties['probably_spam_threshold'] ?? 100),
-            'spam_percent'                 => $stat?->getSpamPercent(),
-            'spam_threshold'               => (float) ($properties['spam_threshold'] ?? 100),
-        ]);
-
-        return $stopped ? GuardResult::stopped($reason) : GuardResult::pass($reason);
-    }
-
-    /**
-     * @param array<string, mixed> $properties
-     */
-    private function auditConditionDecision(
-        RuntimePollResult $poll,
+    /** @param array<string, mixed> $properties */
+    private function conditionThresholdIdentity(
         string $domain,
         array $properties,
-        ?DomainStat $stat,
-        bool $safe,
-        string $decision,
-    ): void {
-        if ('' === $poll->generation
-            || ($this->conditionAuditGenerations[$domain] ?? null) === $poll->generation) {
-            return;
-        }
-        $this->conditionAuditGenerations[$domain] = $poll->generation;
+        ?string $monitorIdentity = null,
+    ): string
+    {
+        return implode('|', [
+            $monitorIdentity ?? 'unscoped',
+            $domain,
+            number_format((float) ($properties['probably_spam_threshold'] ?? 100), 4, '.', ''),
+            number_format((float) ($properties['spam_threshold'] ?? 100), 4, '.', ''),
+        ]);
+    }
 
-        $this->logger->info('mailru_postmaster.condition_evaluation', [
-            'decision'                  => $decision,
-            'route'                     => $safe ? 'yes' : 'no',
-            'domain'                    => $domain,
-            'poll_attempted'             => $poll->attempted,
-            'poll_successful'            => $poll->successful,
-            'poll_generation'            => $poll->generation,
-            'poll_stored_rows'           => $poll->storedRows,
-            'stat_date'                  => $stat?->getStatDate()->format('Y-m-d'),
-            'stat_synced_at'             => $stat?->getSyncedAt()->format(DATE_ATOM),
-            'messages_sent'              => $stat?->getMessagesSent(),
-            'probably_spam_percent'      => $stat?->getProbablySpamPercent(),
-            'probably_spam_threshold'    => (float) ($properties['probably_spam_threshold'] ?? 100),
-            'spam_percent'               => $stat?->getSpamPercent(),
-            'spam_threshold'             => (float) ($properties['spam_threshold'] ?? 100),
+    /** @param array<string, mixed> $properties */
+    private function guardThresholdIdentity(Event $event, string $domain, array $properties): string
+    {
+        return implode('|', [
+            (string) ($event->getCampaign()->getId() ?? 0),
+            (string) ($event->getId() ?? 0),
+            $this->conditionThresholdIdentity($domain, $properties),
         ]);
     }
 

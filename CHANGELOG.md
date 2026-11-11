@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.9 — 2026-11-11
+
+- Remove the plugin-specific rotating audit logger and route threshold events
+  through Mautic's standard `monolog.logger.mautic` channel.
+- Write no audit entry for safe, missing, old or stale threshold checks and no
+  entry for successful provider polling.
+- Record only a transition into a breached `probably_spam_percent` or
+  `spam_percent` state; repeated checks of the same breach remain silent until
+  a fresh safe observation resets the state.
+
 ## 0.6.8 — 2026-11-11
 
 - Make the two-route Mail.ru threshold condition refresh its domain through
