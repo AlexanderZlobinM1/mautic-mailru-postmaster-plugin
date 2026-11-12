@@ -137,6 +137,10 @@ final class DomainSignalsTest extends TestCase
             'domain' => 'mail.example.org',
             'statDate' => $now->format('Y-m-d'),
             'syncedAt' => $now->modify('-7 seconds')->format(DATE_ATOM),
+            'ageSeconds' => 7,
+            'fresh' => true,
+            'status' => 'fresh',
+            'freshnessMaxAgeSeconds' => DomainSignals::FRESHNESS_MAX_AGE_SECONDS,
             'messagesSent' => 321,
             'delivered' => 290,
             'complaints' => 3,
@@ -145,7 +149,7 @@ final class DomainSignalsTest extends TestCase
         ], $provider->snapshot('MAIL.EXAMPLE.ORG.'));
     }
 
-    public function testWarmupProviderReturnsNullWhenSnapshotIsStale(): void
+    public function testWarmupProviderReturnsLatestSnapshotWithExplicitStaleStatus(): void
     {
         $now = new \DateTimeImmutable();
         $stat = $this->stat('mail.example.org', $now->modify('-1 day'), $now, [
@@ -155,7 +159,20 @@ final class DomainSignalsTest extends TestCase
             $this->service(new InMemoryDomainStatReader($stat)),
         );
 
-        self::assertNull($provider->snapshot('mail.example.org'));
+        self::assertSame([
+            'domain' => 'mail.example.org',
+            'statDate' => $now->modify('-1 day')->format('Y-m-d'),
+            'syncedAt' => $now->format(DATE_ATOM),
+            'ageSeconds' => 0,
+            'fresh' => false,
+            'status' => 'stale',
+            'freshnessMaxAgeSeconds' => DomainSignals::FRESHNESS_MAX_AGE_SECONDS,
+            'messagesSent' => 321,
+            'delivered' => 0,
+            'complaints' => 0,
+            'spamPercent' => 0.0,
+            'probablySpamPercent' => 0.0,
+        ], $provider->snapshot('mail.example.org'));
     }
 
     public function testWarmupProviderReturnsNullWhenIntegrationIsDisabled(): void

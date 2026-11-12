@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.11 — 2026-11-12
+
+- Return the latest exact-DKIM persisted snapshot to the optional Warmup bridge
+  even when it is stale.
+- Add explicit `fresh`, `status`, `ageSeconds` and
+  `freshnessMaxAgeSeconds` fields so sibling plugins can display stale values
+  without using them for send permission or blocking decisions.
+
 ## 0.6.10 — 2026-11-11
 
 - Put scheduled report synchronization and fast campaign polling through one

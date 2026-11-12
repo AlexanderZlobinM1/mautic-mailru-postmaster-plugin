@@ -238,13 +238,17 @@ Postmaster classes in their own constructors. This keeps them operational when
 this plugin is absent or disabled. The service never calls Mail.ru and never
 performs OAuth; it only reads the latest `DomainStatRepository` row for an
 exact normalized DKIM `d=` domain. It returns `null` when the integration is
-disabled, the exact domain is not tracked, or the stored row is not fresh.
+disabled or the exact domain is not tracked. The latest persisted row is also
+returned when stale, with `fresh: false`, `status: "stale"`, `ageSeconds` and
+`freshnessMaxAgeSeconds`; sibling plugins may display it but must not use stale
+data as a send permission or blocking decision. Only `fresh: true` may drive a
+decision.
 
 The returned array contains `domain`, `statDate`, `syncedAt`, `messagesSent`,
-`delivered`, `complaints`, `spamPercent` and `probablySpamPercent`. Rates are
-Mail.ru percentage points (`0.5` means `0.5%`). Freshness uses the campaign
-guard rule: the row is for today and was synchronized no more than 1,200
-seconds ago.
+`ageSeconds`, `fresh`, `status`, `freshnessMaxAgeSeconds`, `delivered`,
+`complaints`, `spamPercent` and `probablySpamPercent`. Rates are Mail.ru
+percentage points (`0.5` means `0.5%`). Freshness uses the campaign guard rule:
+the row is for today and was synchronized no more than 1,200 seconds ago.
 
 The DKIM domain is only the exact identity Mail.ru uses for the aggregate
 signal. The contract intentionally exposes no selector, private key or separate
