@@ -27,6 +27,10 @@ final class CampaignSubscriberTest extends TestCase
         self::assertArrayHasKey(CampaignSubscriber::EVENT_TYPE, $actions);
         self::assertTrue($actions[CampaignSubscriber::EVENT_TYPE]['hideTriggerMode']);
         self::assertSame(
+            '@MauticMailRuPostmaster/FormTheme/Campaign/guard_properties_row.html.twig',
+            $actions[CampaignSubscriber::EVENT_TYPE]['formTheme'],
+        );
+        self::assertSame(
             ['target' => [Event::TYPE_ACTION => ['email.send']]],
             $actions[CampaignSubscriber::EVENT_TYPE]['connectionRestrictions'],
         );
@@ -54,6 +58,10 @@ final class CampaignSubscriberTest extends TestCase
         self::assertSame(
             '@MauticMailRuPostmaster/Campaign/condition.html.twig',
             $conditions[CampaignSubscriber::CONDITION_TYPE]['template'],
+        );
+        self::assertSame(
+            '@MauticMailRuPostmaster/FormTheme/Campaign/guard_properties_row.html.twig',
+            $conditions[CampaignSubscriber::CONDITION_TYPE]['formTheme'],
         );
         self::assertTrue($conditions[CampaignSubscriber::CONDITION_TYPE]['hideTriggerMode']);
     }

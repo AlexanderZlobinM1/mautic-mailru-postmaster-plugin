@@ -60,6 +60,12 @@ final class CampaignGuardTypeTest extends TestCase
             'spam_history_days',
         ], array_keys($form->all()));
         self::assertSame('personal-alex.online', $form->get('domain')->getData());
+
+        $view = $form->createView();
+        self::assertSame('col-xs-6', $view['probably_spam_threshold']->vars['row_attr']['class']);
+        self::assertSame('col-xs-6', $view['probably_spam_history_days']->vars['row_attr']['class']);
+        self::assertSame('col-xs-6', $view['spam_threshold']->vars['row_attr']['class']);
+        self::assertSame('col-xs-6', $view['spam_history_days']->vars['row_attr']['class']);
     }
 
     public function testConditionFormIgnoresMalformedAndEmptySenderAddresses(): void

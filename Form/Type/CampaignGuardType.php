@@ -102,7 +102,9 @@ final class CampaignGuardType extends AbstractType
                 'step'     => '0.01',
                 'postaddon'=> '%',
             ],
-            'row_attr' => ['class' => 'col-sm-8'],
+            // Keep the threshold and its history depth side by side in the
+            // standard Mautic campaign modal, with equal-width columns.
+            'row_attr' => ['class' => 'col-xs-6'],
             'constraints' => [
                 new NotBlank(),
                 new Range(min: 0, max: 100),
@@ -122,7 +124,7 @@ final class CampaignGuardType extends AbstractType
                 'max'   => 30,
                 'step'  => 1,
             ],
-            'row_attr' => ['class' => 'col-sm-4'],
+            'row_attr' => ['class' => 'col-xs-6'],
             'constraints' => [
                 new Range(min: 0, max: 30),
             ],

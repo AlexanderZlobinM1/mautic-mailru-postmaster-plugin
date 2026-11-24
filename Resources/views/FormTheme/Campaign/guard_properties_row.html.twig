@@ -1,0 +1,22 @@
+{# The campaign modal renders properties through this block. #}
+{% block _campaignevent_properties_row %}
+    {{ form_row(form.domain) }}
+
+    <div class="row">
+        <div class="col-xs-6">
+            {{ form_row(form.probably_spam_threshold) }}
+        </div>
+        <div class="col-xs-6">
+            {{ form_row(form.probably_spam_history_days) }}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xs-6">
+            {{ form_row(form.spam_threshold) }}
+        </div>
+        <div class="col-xs-6">
+            {{ form_row(form.spam_history_days) }}
+        </div>
+    </div>
+{% endblock %}
