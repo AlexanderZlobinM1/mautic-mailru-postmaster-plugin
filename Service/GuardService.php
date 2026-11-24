@@ -225,6 +225,7 @@ final class GuardService
         string $domain,
         array $properties,
         \DateTimeImmutable $now,
+        bool $includeCurrent = true,
     ): array {
         $probablyHistory = $this->historyDays($properties, 'probably_spam_history_days');
         $spamHistory = $this->historyDays($properties, 'spam_history_days');
@@ -270,6 +271,9 @@ final class GuardService
                 new \DateTimeZone('UTC'),
             );
             $offset = (int) $statDay->diff($today)->format('%r%a');
+            if (!$includeCurrent && 0 === $offset) {
+                continue;
+            }
             if ($offset < 0 || ($offset === 0 && $stat->getSyncedAt() < $now->modify('-20 minutes'))) {
                 continue;
             }
@@ -307,6 +311,68 @@ final class GuardService
         return min(self::MAX_HISTORY_DAYS, max(0, (int) ($properties[$key] ?? 0)));
     }
 
+    /**
+     * Evaluate only configured previous days, without consulting today's
+     * realtime row. The watcher uses this before starting a current-day API
+     * poll so an already persisted historical breach remains decisive even if
+     * Mail.ru is temporarily unavailable.
+     *
+     * @param array<string, mixed> $properties
+     */
+    public function evaluateHistorical(
+        Event $event,
+        ?\DateTimeImmutable $now = null,
+        string $source = 'manual',
+    ): GuardResult {
+        if (!$this->configuration->isEnabled()) {
+            return GuardResult::pass();
+        }
+
+        $now ??= new \DateTimeImmutable();
+        $properties = $event->getProperties();
+        if (!$this->hasHistory($properties)) {
+            return GuardResult::pass();
+        }
+
+        $domain = $this->domainResolver->resolve($event);
+        if (null === $domain) {
+            return GuardResult::pass(
+                $this->translator->trans('mailru.postmaster.guard.reason.no_domain'),
+            );
+        }
+
+        [$breaches, $breachStats] = $this->findConfiguredBreaches($domain, $properties, $now, false);
+        if ([] === $breaches) {
+            if ([] !== $breachStats) {
+                $this->thresholdEventLogger->observe(
+                    'guard',
+                    $this->guardThresholdIdentity($event, $domain, $properties),
+                    [],
+                    [],
+                );
+            }
+
+            return GuardResult::pass();
+        }
+
+        $breach = $breaches[0];
+        $stat = $breachStats[$breach['stat_date']] ?? null;
+        if (!$stat instanceof DomainStat) {
+            return GuardResult::pass();
+        }
+
+        return $this->stopCampaign(
+            $event,
+            $domain,
+            $properties,
+            $this->domainResolver->getLegacyEmailId($event),
+            $breaches,
+            $breach,
+            $stat,
+            $now,
+        );
+    }
+
     public function evaluate(
         Event $event,
         ?\DateTimeImmutable $now = null,
@@ -328,54 +394,39 @@ final class GuardService
             return GuardResult::pass($reason);
         }
 
-        $breachStats = [];
         if ($this->hasHistory($properties)) {
-            [$breaches, $breachStats] = $this->findConfiguredBreaches($domain, $properties, $now);
-            if ([] === $breaches) {
-                if ([] === $breachStats) {
-                    $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
-
-                    return GuardResult::pass($reason);
-                }
-
-                $this->thresholdEventLogger->observe(
-                    'guard',
-                    $this->guardThresholdIdentity($event, $domain, $properties),
-                    [],
-                    [],
-                );
-
-                return GuardResult::pass();
+            $historicalResult = $this->evaluateHistorical($event, $now, $source);
+            if ($historicalResult->stopped) {
+                return $historicalResult;
             }
-        } else {
-            $stat = $this->statRepository->getLatestForDomain($domain);
-            if (!$stat instanceof DomainStat) {
-                $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
-
-                return GuardResult::pass($reason);
-            }
-
-            if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
-                $reason = $this->translator->trans('mailru.postmaster.guard.reason.not_today');
-
-                return GuardResult::pass($reason);
-            }
-
-            if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
-                $reason = $this->translator->trans('mailru.postmaster.guard.reason.stale');
-
-                return GuardResult::pass($reason);
-            }
-
-            $breaches = array_map(
-                fn (array $breach): array => $breach + ['stat_date' => $stat->getStatDate()->format('Y-m-d')],
-                $this->thresholdEvaluator->findBreaches($stat, $properties),
-            );
-            $breachStats[$stat->getStatDate()->format('Y-m-d')] = $stat;
         }
 
-        $breach = $breaches[0] ?? null;
-        if (null === $breach) {
+        // With no history, or after history has passed, retain the original
+        // current-day-only stopper behavior.
+        $stat = $this->statRepository->getLatestForDomain($domain);
+        if (!$stat instanceof DomainStat) {
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
+
+            return GuardResult::pass($reason);
+        }
+
+        if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.not_today');
+
+            return GuardResult::pass($reason);
+        }
+
+        if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
+            $reason = $this->translator->trans('mailru.postmaster.guard.reason.stale');
+
+            return GuardResult::pass($reason);
+        }
+
+        $breaches = array_map(
+            fn (array $breach): array => $breach + ['stat_date' => $stat->getStatDate()->format('Y-m-d')],
+            $this->thresholdEvaluator->findBreaches($stat, $properties),
+        );
+        if ([] === $breaches) {
             $this->thresholdEventLogger->observe(
                 'guard',
                 $this->guardThresholdIdentity($event, $domain, $properties),
@@ -386,11 +437,35 @@ final class GuardService
             return GuardResult::pass();
         }
 
-        $stat = $breachStats[$breach['stat_date']] ?? null;
-        if (!$stat instanceof DomainStat) {
-            return GuardResult::pass();
-        }
+        $breach = $breaches[0];
 
+        return $this->stopCampaign(
+            $event,
+            $domain,
+            $properties,
+            $emailId,
+            $breaches,
+            $breach,
+            $stat,
+            $now,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     * @param list<array{metric: string, actual: float, threshold: float, stat_date?: string}> $breaches
+     * @param array{metric: string, actual: float, threshold: float, stat_date: string} $breach
+     */
+    private function stopCampaign(
+        Event $event,
+        string $domain,
+        array $properties,
+        int $emailId,
+        array $breaches,
+        array $breach,
+        DomainStat $stat,
+        \DateTimeImmutable $now,
+    ): GuardResult {
         $campaign = $event->getCampaign();
         $metric = $this->translator->trans('mailru.postmaster.guard.metric.'.$breach['metric']);
         $reason = $this->translator->trans('mailru.postmaster.guard.reason.stopped', [

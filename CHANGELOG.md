@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.14 — 2026-11-24
+
+- Run the historical stopper check before the current-day watcher poll. A
+  persisted historical breach can now stop the campaign even when Mail.ru is
+  temporarily unavailable; only a safe history proceeds to the realtime check.
+
 ## 0.6.13 — 2026-11-24
 
 - Evaluate configured historical days before the current realtime row while

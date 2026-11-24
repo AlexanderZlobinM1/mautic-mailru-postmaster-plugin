@@ -70,6 +70,19 @@ final class GuardWatchCommand extends Command
                     break;
                 }
 
+                // Historical protection is database-only and must be decided
+                // before a current-day API poll. A persisted breach therefore
+                // stops the campaign even while Mail.ru is unavailable; only
+                // a safe history proceeds to the realtime watcher below.
+                foreach ($monitors as $monitor) {
+                    if (CampaignSubscriber::EVENT_TYPE !== $monitor->getType()) {
+                        continue;
+                    }
+                    if ($this->guardService->evaluateHistorical($monitor, source: 'campaign_watcher')->stopped) {
+                        break 2;
+                    }
+                }
+
                 $freshDomains = [];
                 $monitorDomains = [];
                 foreach ($monitors as $monitor) {
