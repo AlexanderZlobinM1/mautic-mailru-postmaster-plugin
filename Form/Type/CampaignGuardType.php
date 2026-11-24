@@ -115,7 +115,6 @@ final class CampaignGuardType extends AbstractType
             'label_attr' => ['class' => 'control-label'],
             'required'   => false,
             'empty_data' => '0',
-            'html5'      => true,
             'help'       => 'mailru.postmaster.guard.history_days.help',
             'attr'       => [
                 'class' => 'form-control',
