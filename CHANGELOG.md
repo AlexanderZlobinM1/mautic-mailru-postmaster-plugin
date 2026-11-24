@@ -5,6 +5,9 @@
 - Fix Mail.ru campaign stopper and threshold-condition edit forms on Mautic 7:
   history-depth integer fields no longer pass the removed Symfony `html5` form
   option, which caused the campaign event editor to return HTTP 500.
+- Keep the history-depth explanation in Mautic's standard label tooltip instead
+  of rendering a paragraph below each input; the two threshold/history pairs
+  remain compact and side by side in the campaign form.
 - Add regression coverage for condition-form construction and malformed/empty
   sender addresses.
 
