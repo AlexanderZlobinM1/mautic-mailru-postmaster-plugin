@@ -131,7 +131,7 @@ final class GuardServiceConditionTest extends TestCase
             $this->stat($now, $now, [
                 'messages_sent' => 100,
                 'spam_percent' => 0.0,
-                'probably_spam_percent' => 0.0,
+                'probably_spam_percent' => 1.5,
             ]),
             $this->stat($now->modify('-1 day'), $now->modify('-1 day'), [
                 'messages_sent' => 100,

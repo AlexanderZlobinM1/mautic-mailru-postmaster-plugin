@@ -239,6 +239,22 @@ final class GuardService
             $today->modify(sprintf('-%d days', $maxHistory)),
             $today,
         );
+        $todayDate = $today->format('Y-m-d');
+        usort($stats, static function (DomainStat $left, DomainStat $right) use ($todayDate): int {
+            $leftDate = $left->getStatDate()->format('Y-m-d');
+            $rightDate = $right->getStatDate()->format('Y-m-d');
+            $leftIsToday = $leftDate === $todayDate;
+            $rightIsToday = $rightDate === $todayDate;
+
+            // When history is enabled, evaluate persisted previous days first
+            // and only then the current realtime row. This makes a historical
+            // breach decisive before the current day's refresh is considered.
+            if ($leftIsToday !== $rightIsToday) {
+                return $leftIsToday ? 1 : -1;
+            }
+
+            return strcmp($rightDate, $leftDate);
+        });
         $breaches = [];
         $breachStats = [];
 

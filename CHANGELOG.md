@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.13 — 2026-11-24
+
+- Evaluate configured historical days before the current realtime row while
+  retaining the current-day-only behavior when both history fields are empty or
+  zero.
+
 ## 0.6.12 — 2026-11-24
 
 - Add independent per-metric history depth fields to the campaign stopper and
