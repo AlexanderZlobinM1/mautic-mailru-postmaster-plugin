@@ -66,6 +66,11 @@ final class CampaignGuardTypeTest extends TestCase
         self::assertSame('col-xs-6', $view['probably_spam_history_days']->vars['row_attr']['class']);
         self::assertSame('col-xs-6', $view['spam_threshold']->vars['row_attr']['class']);
         self::assertSame('col-xs-6', $view['spam_history_days']->vars['row_attr']['class']);
+        self::assertNull($view['probably_spam_history_days']->vars['help']);
+        self::assertSame(
+            'mailru.postmaster.guard.history_days.help',
+            $view['probably_spam_history_days']->vars['attr']['tooltip'],
+        );
     }
 
     public function testConditionFormIgnoresMalformedAndEmptySenderAddresses(): void
