@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.15 — 2026-11-24
+
+- Apply history-first ordering to the two-route condition as well as the
+  stopper: a historical breach routes immediately without a realtime API call,
+  while safe history proceeds to the current-day poll.
+
 ## 0.6.14 — 2026-11-24
 
 - Run the historical stopper check before the current-day watcher poll. A

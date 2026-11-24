@@ -143,6 +143,7 @@ final class GuardServiceConditionTest extends TestCase
         $logger->expects(self::once())->method('warning')->with(
             'mailru_postmaster.condition_threshold_triggered',
             self::callback(static fn (array $context): bool => '2026-11-10' === $context['stat_date']
+                && 'history-only' === $context['poll_generation']
                 && ['probably_spam_percent'] === $context['triggered_metrics']),
         );
 
@@ -153,6 +154,7 @@ final class GuardServiceConditionTest extends TestCase
             'spam_history_days' => 0,
             'probably_spam_history_days' => 1,
         ], $now));
+        self::assertSame(['read'], $order->calls);
     }
 
     public function testMissingHistoryDayAndIndependentMetricDepthAreIgnored(): void

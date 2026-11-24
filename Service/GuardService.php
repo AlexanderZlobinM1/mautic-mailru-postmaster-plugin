@@ -167,6 +167,42 @@ final class GuardService
             return true;
         }
 
+        // A configured historical breach is decisive without waiting for a
+        // current-day API call. Only safe history proceeds to realtime data.
+        if ($this->hasHistory($properties)) {
+            [$historicalBreaches, $historicalStats] = $this->findConfiguredBreaches(
+                $domain,
+                $properties,
+                $now,
+                false,
+            );
+            if ([] !== $historicalBreaches) {
+                $historicalBreach = $historicalBreaches[0];
+                $historicalStat = $historicalStats[$historicalBreach['stat_date']] ?? null;
+                if ($historicalStat instanceof DomainStat) {
+                    $this->thresholdEventLogger->observe(
+                        'condition',
+                        $this->conditionThresholdIdentity($domain, $properties, $monitorIdentity),
+                        $historicalBreaches,
+                        [
+                            'action'                  => 'route_no',
+                            'domain'                  => $domain,
+                            'poll_generation'         => 'history-only',
+                            'stat_date'               => $historicalBreach['stat_date'],
+                            'stat_synced_at'          => $historicalStat->getSyncedAt()->format(DATE_ATOM),
+                            'messages_sent'           => $historicalStat->getMessagesSent(),
+                            'probably_spam_percent'   => $historicalStat->getProbablySpamPercent(),
+                            'probably_spam_threshold' => (float) ($properties['probably_spam_threshold'] ?? 100),
+                            'spam_percent'            => $historicalStat->getSpamPercent(),
+                            'spam_threshold'          => (float) ($properties['spam_threshold'] ?? 100),
+                        ],
+                    );
+
+                    return false;
+                }
+            }
+        }
+
         $poll = $this->runtimePoller->pollDomainForDecision($domain, 'campaign_condition');
         [$breaches, $breachStats] = $this->findConfiguredBreaches($domain, $properties, $now);
         if ([] === $breaches) {
