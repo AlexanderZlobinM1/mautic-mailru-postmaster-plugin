@@ -47,6 +47,34 @@ final class DomainStatRepository extends CommonRepository implements DomainStatR
     }
 
     /**
+     * @return list<DomainStat>
+     */
+    public function getForDomainBetween(
+        string $domain,
+        \DateTimeImmutable $dateFrom,
+        \DateTimeImmutable $dateTo,
+    ): array {
+        $stats = $this->findBy(
+            ['domain' => $domain, 'isTracked' => true],
+            ['statDate' => 'DESC'],
+        );
+
+        foreach ($stats as $stat) {
+            // A campaign trigger may have polled and persisted this domain in
+            // another process immediately before the decision. Reload every
+            // row so a historical check never evaluates an identity-map
+            // snapshot left over from an earlier request.
+            $this->getEntityManager()->refresh($stat);
+        }
+
+        return array_values(array_filter(
+            $stats,
+            static fn (DomainStat $stat): bool => $stat->getStatDate()->format('Y-m-d') >= $dateFrom->format('Y-m-d')
+                && $stat->getStatDate()->format('Y-m-d') <= $dateTo->format('Y-m-d'),
+        ));
+    }
+
+    /**
      * @return list<string>
      */
     public function getTrackedDomains(): array

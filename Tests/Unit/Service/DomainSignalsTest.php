@@ -222,4 +222,18 @@ final class InMemoryDomainStatReader implements DomainStatReader
 
         return $this->stat;
     }
+
+    public function getForDomainBetween(
+        string $domain,
+        \DateTimeImmutable $dateFrom,
+        \DateTimeImmutable $dateTo,
+    ): array {
+        if (!$this->stat instanceof DomainStat
+            || $this->stat->getStatDate()->format('Y-m-d') < $dateFrom->format('Y-m-d')
+            || $this->stat->getStatDate()->format('Y-m-d') > $dateTo->format('Y-m-d')) {
+            return [];
+        }
+
+        return [$this->stat];
+    }
 }

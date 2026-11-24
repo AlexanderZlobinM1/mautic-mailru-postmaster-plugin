@@ -10,4 +10,13 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Entity;
 interface DomainStatReader
 {
     public function getLatestForDomain(string $domain): ?DomainStat;
+
+    /**
+     * @return list<DomainStat>
+     */
+    public function getForDomainBetween(
+        string $domain,
+        \DateTimeImmutable $dateFrom,
+        \DateTimeImmutable $dateTo,
+    ): array;
 }

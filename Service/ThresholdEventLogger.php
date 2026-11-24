@@ -19,7 +19,7 @@ final class ThresholdEventLogger
      * breached state. Safe observations reset the state without producing a
      * log entry.
      *
-     * @param list<array{metric: string, actual: float, threshold: float}> $breaches
+     * @param list<array{metric: string, actual: float, threshold: float, stat_date?: string}> $breaches
      * @param array<string, mixed>                                        $context
      */
     public function observe(string $monitor, string $identity, array $breaches, array $context): void

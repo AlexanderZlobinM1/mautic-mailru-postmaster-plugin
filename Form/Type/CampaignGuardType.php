@@ -7,6 +7,7 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Form\Type;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\EmailDomainProvider;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
@@ -101,9 +102,30 @@ final class CampaignGuardType extends AbstractType
                 'step'     => '0.01',
                 'postaddon'=> '%',
             ],
+            'row_attr' => ['class' => 'col-sm-8'],
             'constraints' => [
                 new NotBlank(),
                 new Range(min: 0, max: 100),
+            ],
+        ]);
+
+        $historyName = str_replace('_threshold', '_history_days', $name);
+        $builder->add($historyName, IntegerType::class, [
+            'label'      => 'mailru.postmaster.guard.history_days',
+            'label_attr' => ['class' => 'control-label'],
+            'required'   => false,
+            'empty_data' => '0',
+            'html5'      => true,
+            'help'       => 'mailru.postmaster.guard.history_days.help',
+            'attr'       => [
+                'class' => 'form-control',
+                'min'   => 0,
+                'max'   => 30,
+                'step'  => 1,
+            ],
+            'row_attr' => ['class' => 'col-sm-4'],
+            'constraints' => [
+                new Range(min: 0, max: 30),
             ],
         ]);
     }

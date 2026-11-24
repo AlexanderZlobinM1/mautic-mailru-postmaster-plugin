@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.12 — 2026-11-24
+
+- Add independent per-metric history depth fields to the campaign stopper and
+  threshold condition. `0` keeps the existing current-day behavior; `N` checks
+  today and the previous `N` calendar days within the stored 30-day window.
+- Ignore missing stored days instead of treating them as zero-valued statistics.
+- Keep current-day freshness checks and fail-open behavior while allowing
+  explicitly configured historical rows to trigger the same stopper or route.
+
 ## 0.6.11 — 2026-11-12
 
 - Return the latest exact-DKIM persisted snapshot to the optional Warmup bridge

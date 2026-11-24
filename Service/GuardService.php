@@ -21,6 +21,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class GuardService
 {
+    private const MAX_HISTORY_DAYS = 30;
+
     public function __construct(
         private readonly EventRepository $eventRepository,
         private readonly EntityManagerInterface $entityManager,
@@ -166,19 +168,33 @@ final class GuardService
         }
 
         $poll = $this->runtimePoller->pollDomainForDecision($domain, 'campaign_condition');
-        $stat = $this->statRepository->getLatestForDomain($domain);
-        if (!$stat instanceof DomainStat) {
-            return true;
-        }
-        if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
-            return true;
-        }
-        if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
+        [$breaches, $breachStats] = $this->findConfiguredBreaches($domain, $properties, $now);
+        if ([] === $breaches) {
+            $latest = array_values($breachStats)[0] ?? null;
+            if ($latest instanceof DomainStat) {
+                $this->thresholdEventLogger->observe(
+                    'condition',
+                    $this->conditionThresholdIdentity($domain, $properties, $monitorIdentity),
+                    [],
+                    [
+                        'action' => 'route_yes',
+                        'domain' => $domain,
+                        'poll_generation' => $poll->generation,
+                        'stat_date' => $latest->getStatDate()->format('Y-m-d'),
+                        'stat_synced_at' => $latest->getSyncedAt()->format(DATE_ATOM),
+                    ],
+                );
+            }
+
             return true;
         }
 
-        $breaches = $this->thresholdEvaluator->findBreaches($stat, $properties);
-        $safe = [] === $breaches;
+        $breach = $breaches[0];
+        $stat = $breachStats[$breach['stat_date']] ?? null;
+        if (!$stat instanceof DomainStat) {
+            return true;
+        }
+
         $this->thresholdEventLogger->observe(
             'condition',
             $this->conditionThresholdIdentity($domain, $properties, $monitorIdentity),
@@ -187,7 +203,7 @@ final class GuardService
                 'action'                  => 'route_no',
                 'domain'                  => $domain,
                 'poll_generation'         => $poll->generation,
-                'stat_date'               => $stat->getStatDate()->format('Y-m-d'),
+                'stat_date'               => $breach['stat_date'],
                 'stat_synced_at'          => $stat->getSyncedAt()->format(DATE_ATOM),
                 'messages_sent'           => $stat->getMessagesSent(),
                 'probably_spam_percent'   => $stat->getProbablySpamPercent(),
@@ -197,7 +213,82 @@ final class GuardService
             ],
         );
 
-        return $safe;
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     *
+     * @return array{0: list<array{metric: string, actual: float, threshold: float, stat_date: string}>, 1: array<string, DomainStat>}
+     */
+    private function findConfiguredBreaches(
+        string $domain,
+        array $properties,
+        \DateTimeImmutable $now,
+    ): array {
+        $probablyHistory = $this->historyDays($properties, 'probably_spam_history_days');
+        $spamHistory = $this->historyDays($properties, 'spam_history_days');
+        $maxHistory = max($probablyHistory, $spamHistory);
+        $today = \DateTimeImmutable::createFromFormat(
+            '!Y-m-d',
+            $now->format('Y-m-d'),
+            new \DateTimeZone('UTC'),
+        );
+        $stats = $this->statRepository->getForDomainBetween(
+            $domain,
+            $today->modify(sprintf('-%d days', $maxHistory)),
+            $today,
+        );
+        $breaches = [];
+        $breachStats = [];
+
+        foreach ($stats as $stat) {
+            $statDate = $stat->getStatDate()->format('Y-m-d');
+            $breachStats[$statDate] = $stat;
+            // DomainStat is a DATE in the database.  Normalize test and
+            // driver values to calendar midnights as well; a timestamp such
+            // as yesterday at 12:00 must still count as one previous day.
+            $statDay = \DateTimeImmutable::createFromFormat(
+                '!Y-m-d',
+                $statDate,
+                new \DateTimeZone('UTC'),
+            );
+            $offset = (int) $statDay->diff($today)->format('%r%a');
+            if ($offset < 0 || ($offset === 0 && $stat->getSyncedAt() < $now->modify('-20 minutes'))) {
+                continue;
+            }
+
+            foreach ($this->thresholdEvaluator->findBreaches($stat, $properties) as $breach) {
+                $historyDays = 'probably_spam_percent' === $breach['metric']
+                    ? $probablyHistory
+                    : $spamHistory;
+                if ($offset > $historyDays) {
+                    continue;
+                }
+
+                $breach['stat_date'] = $statDate;
+                $breaches[] = $breach;
+            }
+        }
+
+        return [$breaches, $breachStats];
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     */
+    private function hasHistory(array $properties): bool
+    {
+        return $this->historyDays($properties, 'probably_spam_history_days') > 0
+            || $this->historyDays($properties, 'spam_history_days') > 0;
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     */
+    private function historyDays(array $properties, string $key): int
+    {
+        return min(self::MAX_HISTORY_DAYS, max(0, (int) ($properties[$key] ?? 0)));
     }
 
     public function evaluate(
@@ -221,26 +312,52 @@ final class GuardService
             return GuardResult::pass($reason);
         }
 
-        $stat = $this->statRepository->getLatestForDomain($domain);
-        if (!$stat instanceof DomainStat) {
-            $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
+        $breachStats = [];
+        if ($this->hasHistory($properties)) {
+            [$breaches, $breachStats] = $this->findConfiguredBreaches($domain, $properties, $now);
+            if ([] === $breaches) {
+                if ([] === $breachStats) {
+                    $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
 
-            return GuardResult::pass($reason);
+                    return GuardResult::pass($reason);
+                }
+
+                $this->thresholdEventLogger->observe(
+                    'guard',
+                    $this->guardThresholdIdentity($event, $domain, $properties),
+                    [],
+                    [],
+                );
+
+                return GuardResult::pass();
+            }
+        } else {
+            $stat = $this->statRepository->getLatestForDomain($domain);
+            if (!$stat instanceof DomainStat) {
+                $reason = $this->translator->trans('mailru.postmaster.guard.reason.no_stats');
+
+                return GuardResult::pass($reason);
+            }
+
+            if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
+                $reason = $this->translator->trans('mailru.postmaster.guard.reason.not_today');
+
+                return GuardResult::pass($reason);
+            }
+
+            if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
+                $reason = $this->translator->trans('mailru.postmaster.guard.reason.stale');
+
+                return GuardResult::pass($reason);
+            }
+
+            $breaches = array_map(
+                fn (array $breach): array => $breach + ['stat_date' => $stat->getStatDate()->format('Y-m-d')],
+                $this->thresholdEvaluator->findBreaches($stat, $properties),
+            );
+            $breachStats[$stat->getStatDate()->format('Y-m-d')] = $stat;
         }
 
-        if ($stat->getStatDate()->format('Y-m-d') !== $now->format('Y-m-d')) {
-            $reason = $this->translator->trans('mailru.postmaster.guard.reason.not_today');
-
-            return GuardResult::pass($reason);
-        }
-
-        if ($stat->getSyncedAt() < $now->modify('-20 minutes')) {
-            $reason = $this->translator->trans('mailru.postmaster.guard.reason.stale');
-
-            return GuardResult::pass($reason);
-        }
-
-        $breaches = $this->thresholdEvaluator->findBreaches($stat, $properties);
         $breach = $breaches[0] ?? null;
         if (null === $breach) {
             $this->thresholdEventLogger->observe(
@@ -250,6 +367,11 @@ final class GuardService
                 [],
             );
 
+            return GuardResult::pass();
+        }
+
+        $stat = $breachStats[$breach['stat_date']] ?? null;
+        if (!$stat instanceof DomainStat) {
             return GuardResult::pass();
         }
 
@@ -322,6 +444,8 @@ final class GuardService
             $domain,
             number_format((float) ($properties['probably_spam_threshold'] ?? 100), 4, '.', ''),
             number_format((float) ($properties['spam_threshold'] ?? 100), 4, '.', ''),
+            (string) $this->historyDays($properties, 'probably_spam_history_days'),
+            (string) $this->historyDays($properties, 'spam_history_days'),
         ]);
     }
 

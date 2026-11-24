@@ -6,7 +6,18 @@ namespace MauticPlugin\MauticMailRuPostmasterBundle\Tests\Unit\Service;
 
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStat;
 use MauticPlugin\MauticMailRuPostmasterBundle\Entity\DomainStatReader;
+use MauticPlugin\MauticMailRuPostmasterBundle\Entity\GuardStopRepository;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\EmailDomainProvider;
+use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardDomainResolver;
 use MauticPlugin\MauticMailRuPostmasterBundle\Integration\PostmasterConfiguration;
+use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
+use Mautic\CampaignBundle\Entity\Campaign;
+use Mautic\CampaignBundle\Entity\Event;
+use Mautic\CampaignBundle\Model\CampaignModel;
+use Mautic\CampaignBundle\Entity\EventRepository;
+use Mautic\CoreBundle\Entity\CommonRepository;
+use Mautic\CoreBundle\Helper\CoreParametersHelper;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\ConditionRuntimePoller;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\GuardService;
 use MauticPlugin\MauticMailRuPostmasterBundle\Service\RuntimePollResult;
@@ -108,6 +119,144 @@ final class GuardServiceConditionTest extends TestCase
         self::assertSame([], $order->calls);
     }
 
+    public function testConditionUsesConfiguredPreviousDayForEachMetric(): void
+    {
+        $now = new \DateTimeImmutable('2026-11-11 12:00:00+01:00');
+        $order = new ConditionCallOrder();
+        $poller = new ConditionPollerStub(
+            $order,
+            new RuntimePollResult('mail.example.org', true, true, 'generation-history', 1),
+        );
+        $reader = new ConditionStatReaderStub($order, null, [
+            $this->stat($now, $now, [
+                'messages_sent' => 100,
+                'spam_percent' => 0.0,
+                'probably_spam_percent' => 0.0,
+            ]),
+            $this->stat($now->modify('-1 day'), $now->modify('-1 day'), [
+                'messages_sent' => 100,
+                'spam_percent' => 0.0,
+                'probably_spam_percent' => 2.0,
+            ]),
+        ]);
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('warning')->with(
+            'mailru_postmaster.condition_threshold_triggered',
+            self::callback(static fn (array $context): bool => '2026-11-10' === $context['stat_date']
+                && ['probably_spam_percent'] === $context['triggered_metrics']),
+        );
+
+        self::assertFalse($this->service(true, $poller, $reader, $logger)->isThresholdSafe([
+            'domain' => 'mail.example.org',
+            'spam_threshold' => 1.0,
+            'probably_spam_threshold' => 1.0,
+            'spam_history_days' => 0,
+            'probably_spam_history_days' => 1,
+        ], $now));
+    }
+
+    public function testMissingHistoryDayAndIndependentMetricDepthAreIgnored(): void
+    {
+        $now = new \DateTimeImmutable('2026-11-11 12:00:00+01:00');
+        $order = new ConditionCallOrder();
+        $poller = new ConditionPollerStub(
+            $order,
+            new RuntimePollResult('mail.example.org', true, true, 'generation-history', 1),
+        );
+        $reader = new ConditionStatReaderStub($order, null, [
+            $this->stat($now, $now, [
+                'messages_sent' => 100,
+                'spam_percent' => 0.0,
+                'probably_spam_percent' => 0.0,
+            ]),
+            $this->stat($now->modify('-1 day'), $now->modify('-1 day'), [
+                'messages_sent' => 100,
+                'spam_percent' => 2.0,
+                'probably_spam_percent' => 0.0,
+            ]),
+        ]);
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::never())->method('warning');
+
+        self::assertTrue($this->service(true, $poller, $reader, $logger)->isThresholdSafe([
+            'domain' => 'mail.example.org',
+            'spam_threshold' => 1.0,
+            'probably_spam_threshold' => 1.0,
+            'spam_history_days' => 0,
+            'probably_spam_history_days' => 1,
+        ], $now));
+    }
+
+    public function testAnAbsentHistoricalDayIsNotSynthesizedAsAZeroOrBreach(): void
+    {
+        $now = new \DateTimeImmutable('2026-11-11 12:00:00+01:00');
+        $order = new ConditionCallOrder();
+        $poller = new ConditionPollerStub(
+            $order,
+            new RuntimePollResult('mail.example.org', true, true, 'generation-missing-day', 1),
+        );
+        $reader = new ConditionStatReaderStub($order, $this->stat($now, $now, [
+            'messages_sent' => 100,
+            'spam_percent' => 0.0,
+            'probably_spam_percent' => 0.0,
+        ]));
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::never())->method('warning');
+
+        self::assertTrue($this->service(true, $poller, $reader, $logger)->isThresholdSafe([
+            'domain' => 'mail.example.org',
+            'spam_threshold' => 1.0,
+            'probably_spam_threshold' => 1.0,
+            'spam_history_days' => 3,
+            'probably_spam_history_days' => 3,
+        ], $now));
+    }
+
+    public function testStopperUsesTheSameHistoricalRowsAsTheCondition(): void
+    {
+        $now = new \DateTimeImmutable('2026-11-11 12:00:00+01:00');
+        $order = new ConditionCallOrder();
+        $reader = new ConditionStatReaderStub($order, null, [
+            $this->stat($now, $now, [
+                'messages_sent' => 100,
+                'spam_percent' => 0.0,
+                'probably_spam_percent' => 0.0,
+            ]),
+            $this->stat($now->modify('-1 day'), $now->modify('-1 day'), [
+                'messages_sent' => 100,
+                'spam_percent' => 0.0,
+                'probably_spam_percent' => 2.0,
+            ]),
+        ]);
+        $logger = $this->createMock(LoggerInterface::class);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects(self::once())->method('persist');
+        $entityManager->expects(self::once())->method('flush');
+        $stopRepository = (new \ReflectionClass(GuardStopRepository::class))->newInstanceWithoutConstructor();
+        (new \ReflectionProperty(CommonRepository::class, '_em'))->setValue($stopRepository, $entityManager);
+
+        $campaign = $this->createMock(Campaign::class);
+        $campaign->method('getId')->willReturn(42);
+        $campaign->method('getName')->willReturn('History campaign');
+        $campaignModel = $this->createMock(CampaignModel::class);
+        $campaignModel->expects(self::once())->method('transactionalCampaignUnPublish')->with($campaign);
+        $event = $this->createMock(Event::class);
+        $event->method('getId')->willReturn(7);
+        $event->method('getCampaign')->willReturn($campaign);
+        $event->method('getProperties')->willReturn([
+            'domain' => 'mail.example.org',
+            'spam_threshold' => 1.0,
+            'probably_spam_threshold' => 1.0,
+            'spam_history_days' => 0,
+            'probably_spam_history_days' => 1,
+        ]);
+
+        $result = $this->stopperService($reader, $logger, $entityManager, $stopRepository, $campaignModel)
+            ->evaluate($event, $now, 'test');
+
+        self::assertTrue($result->stopped);
+    }
+
     private function service(
         bool $enabled,
         ConditionRuntimePoller $poller,
@@ -124,6 +273,43 @@ final class GuardServiceConditionTest extends TestCase
             'statRepository' => $reader,
             'thresholdEvaluator' => new ThresholdEvaluator(),
             'thresholdEventLogger' => new ThresholdEventLogger($logger, $this->stateDir()),
+        ] as $property => $value) {
+            (new \ReflectionProperty(GuardService::class, $property))->setValue($service, $value);
+        }
+
+        return $service;
+    }
+
+    private function stopperService(
+        DomainStatReader $reader,
+        LoggerInterface $logger,
+        EntityManagerInterface $entityManager,
+        GuardStopRepository $stopRepository,
+        CampaignModel $campaignModel,
+    ): GuardService {
+        $service = (new \ReflectionClass(GuardService::class))->newInstanceWithoutConstructor();
+        $configuration = $this->createMock(PostmasterConfiguration::class);
+        $configuration->method('isEnabled')->willReturn(true);
+        $parameters = $this->createMock(CoreParametersHelper::class);
+        $domainProvider = new EmailDomainProvider($this->createMock(Connection::class), $parameters);
+        $translator = $this->createMock(\Symfony\Contracts\Translation\TranslatorInterface::class);
+        $translator->method('trans')->willReturn('translated');
+
+        $runtimePoller = $this->createMock(ConditionRuntimePoller::class);
+        $eventRepository = $this->createMock(EventRepository::class);
+
+        foreach ([
+            'eventRepository' => $eventRepository,
+            'entityManager' => $entityManager,
+            'domainResolver' => new GuardDomainResolver($domainProvider),
+            'thresholdEvaluator' => new ThresholdEvaluator(),
+            'statRepository' => $reader,
+            'runtimePoller' => $runtimePoller,
+            'stopRepository' => $stopRepository,
+            'campaignModel' => $campaignModel,
+            'thresholdEventLogger' => new ThresholdEventLogger($logger, $this->stateDir()),
+            'translator' => $translator,
+            'configuration' => $configuration,
         ] as $property => $value) {
             (new \ReflectionProperty(GuardService::class, $property))->setValue($service, $value);
         }
@@ -178,9 +364,11 @@ final class ConditionPollerStub implements ConditionRuntimePoller
 
 final class ConditionStatReaderStub implements DomainStatReader
 {
+    /** @param list<DomainStat> $stats */
     public function __construct(
         private readonly ConditionCallOrder $order,
         private readonly ?DomainStat $stat,
+        private readonly array $stats = [],
     ) {
     }
 
@@ -189,5 +377,23 @@ final class ConditionStatReaderStub implements DomainStatReader
         $this->order->calls[] = 'read';
 
         return $this->stat;
+    }
+
+    public function getForDomainBetween(
+        string $domain,
+        \DateTimeImmutable $dateFrom,
+        \DateTimeImmutable $dateTo,
+    ): array {
+        $this->order->calls[] = 'read';
+
+        $stats = [] !== $this->stats
+            ? $this->stats
+            : ($this->stat instanceof DomainStat ? [$this->stat] : []);
+
+        return array_values(array_filter(
+            $stats,
+            static fn (DomainStat $stat): bool => $stat->getStatDate()->format('Y-m-d') >= $dateFrom->format('Y-m-d')
+                && $stat->getStatDate()->format('Y-m-d') <= $dateTo->format('Y-m-d'),
+        ));
     }
 }
